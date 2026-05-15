@@ -1,4 +1,5 @@
-# NanoFloat-2.0
+# NanoFloat 2.0 nanOS and hardware guide 
+
 
 # Hardware:
 Download Altium, the files in hardware files, and open the Altium project file in Altium.
