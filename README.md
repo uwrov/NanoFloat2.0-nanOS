@@ -1,10 +1,14 @@
 # NanoFloat 2.0 nanOS and hardware guide 
 
-# nanOS Firmware
+
+# About
+nanOS, delivers core profiling float functions for UWROV's NanoFloat 2.0 compact vertical profiling float. Specifically, nanOS implements depth control, data collection, and wireless telemetry, on affordable, accessible hardware.
+
+# nanOS Guide:
 MATE-Competiton folder contains full firware implementation for 2 vertical profiles at 2.5m and 40cm.<br/>
 demos folder contains individual demos for isolated testing each fuctionality of nanOS.
 
-# Hardware:
+# Hardware Guide:
 Download Altium and the files in NanoFloat_2_0_Final_Hardware. Open the Altium project file in Altium.<br/>
 Helpful links:
 
