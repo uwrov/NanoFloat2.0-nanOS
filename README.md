@@ -1,5 +1,8 @@
 # NanoFloat 2.0 nanOS and hardware guide 
 
+# nanOS Firmware
+MATE-Competiton folder contains full firware implementation for 2 vertical profiles at 2.5m and 40cm.
+demos folder contains individual demos for isolated testing each fuctionality of nanOS.
 
 # Hardware:
 Download Altium, the files in hardware files, and open the Altium project file in Altium.
