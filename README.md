@@ -1,12 +1,12 @@
 # NanoFloat 2.0 nanOS and hardware guide 
 
 # nanOS Firmware
-MATE-Competiton folder contains full firware implementation for 2 vertical profiles at 2.5m and 40cm.
-> demos folder contains individual demos for isolated testing each fuctionality of nanOS.
+MATE-Competiton folder contains full firware implementation for 2 vertical profiles at 2.5m and 40cm.<br/>
+demos folder contains individual demos for isolated testing each fuctionality of nanOS.
 
 # Hardware:
-Download Altium and the files in NanoFloat_2_0_Final_Hardware. Open the Altium project file in Altium.
-> Helpful links:
+Download Altium and the files in NanoFloat_2_0_Final_Hardware. Open the Altium project file in Altium.<br/>
+Helpful links:
 
 >[Seeed Studio ESP32C6 (Latest Version) Pinout](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/)
 
