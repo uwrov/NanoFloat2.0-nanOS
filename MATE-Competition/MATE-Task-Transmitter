@@ -87,7 +87,7 @@ void piston_out();
 void piston_in();
 void piston_stop();
 void IRAM_ATTR encoder_isr(); 
-bool set_time(); 
+bool set_time_manually(); 
 void save_position(); 
 void position_reset(); 
 void read_sensor(float &depth, float &pressure); 
@@ -222,7 +222,7 @@ void setup() {
     Serial.println("Log file already exists, appending"); 
   }
 
-  set_time(); 
+  set_time_manually(); 
 
   Serial.println("Configuring access point..."); 
   WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
@@ -269,7 +269,7 @@ void initialize_mcp() {
   Serial.println("MCP23017 initialized!"); 
 }
 // //================================================================================================================================================
-// //                                                              Initialize RFM9x Radio 
+// //                                                              RFM9x Radio Functions 
 
 void initialize_radio() {
   digitalWrite(PIN_RF95_RST, HIGH);
@@ -299,6 +299,28 @@ void initialize_radio() {
   rf95.setTxPower(23, false);
   radio_available = true;
   Serial.println("NanoFloat radio initialized!");
+}
+
+void radio_send(const String &message) {
+  if (!radio_available) return;
+  char buf[120];
+  message.toCharArray(buf, sizeof(buf));
+  rf95.send((uint8_t *)buf, strlen(buf) + 1);
+  rf95.waitPacketSent();
+}
+
+String radio_receive(unsigned long timeout_ms) {
+  unsigned long start = millis();
+  while (millis() - start < timeout_ms) {
+    if (rf95.available()) {
+      uint8_t buf[120];
+      uint8_t len = sizeof(buf);
+      if (rf95.recv(buf, &len)) {
+        return String((char *)buf);
+      }
+    }
+  }
+  return "";
 }
 
 // //================================================================================================================================================
