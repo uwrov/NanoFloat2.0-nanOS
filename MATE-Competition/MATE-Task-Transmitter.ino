@@ -101,8 +101,6 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-void encoder_test();
-bool run_step(bool extend, float &depth, float &pressure);
 
 
 //================================================================================================================================================
@@ -116,6 +114,8 @@ long depth_to_encoder(float depth_m) {
   if (depth_m <= 2.5f) {
     return ENCODER_COUNT_2_5M;
   }
+
+  return ENCODER_COUNT_2_5M;
 }
 
 //================================================================================================================================================
