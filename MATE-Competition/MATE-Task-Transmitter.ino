@@ -232,13 +232,10 @@ void setup() {
 
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
-  Serial.println("\nMission will auto-start in 10 seconds...");
-  Serial.println("(Or call competition_mission() manually)\n");
 
   // Initialize radio transmitter
   initialize_radio();
 
-  Serial.println("Skipping motor test - proceeding with mission\n");
 }
 
 // //================================================================================================================================================ 
