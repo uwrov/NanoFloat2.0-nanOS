@@ -81,6 +81,7 @@ long depth_to_encoder(float depth_m);
 void piston_out();
 void piston_in();
 void piston_stop();
+void piston_move(int encoder_steps);
 void IRAM_ATTR encoder_isr(); 
 bool set_time_manually(); 
 void save_position(); 
@@ -103,6 +104,7 @@ void appendFile(fs::FS &fs, const char* path, const char* message);
 void motor_test();
 void encoder_test();
 bool run_step(bool extend, float &depth, float &pressure);
+
 
 //================================================================================================================================================
 //                                                              Depth and Encoder Mapped Counts
@@ -277,7 +279,7 @@ void initialize_radio() {
   digitalWrite(PIN_RF95_RST, HIGH);
   delay(10);
 
-  while (!rf95.init()) {
+  if (!rf95.init()) {
     Serial.println("NanoFloat radio init failed");
     radio_available = false;
     return;
@@ -605,8 +607,8 @@ bool move_to_depth(float target_depth_m) {
     //Accumulate encoder ticks
     noInterrupts();
     piston_position += encoder_delta;
-    interrupts();
     encoder_delta = 0;
+    interrupts();
 
     //Read sensor
     read_sensor(depth, pressure);
@@ -681,9 +683,9 @@ bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
     }
 
     if (depth < (target_depth_m - sensordepth_tolerance)) {
-      piston_move(-ENCODER_CORRECTION_STEP, false);
+      piston_move(-ENCODER_CORRECTION_STEP);
     } else if (depth > (target_depth_m + sensordepth_tolerance)) {
-      piston_move(ENCODER_CORRECTION_STEP, false);
+      piston_move(ENCODER_CORRECTION_STEP);
     } 
 
     if (millis() - last_read_time >= read_interval && read_count < readings) {
