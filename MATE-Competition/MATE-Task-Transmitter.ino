@@ -68,7 +68,7 @@ const int EEPROM_POSITION_ADDR = 0;
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
 // Define RFM95 frequency
-#define RF95_FREQ 900.0
+#define RF95_FREQ 915.0
 #define TX_INTERVAL 5000
 
 #define FORMAT_LITTLEFS_IF_FAILED true
