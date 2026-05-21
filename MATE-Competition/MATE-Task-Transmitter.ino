@@ -101,7 +101,6 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-void motor_test();
 void encoder_test();
 bool run_step(bool extend, float &depth, float &pressure);
 
