@@ -83,7 +83,7 @@ void piston_in();
 void piston_stop();
 void piston_move(int encoder_steps);
 void IRAM_ATTR encoder_isr(); 
-bool set_time_manually(); 
+void set_time_manually(); 
 void save_position(); 
 void position_reset(); 
 void read_sensor(float &depth, float &pressure); 
@@ -238,19 +238,6 @@ void setup() {
   // Initialize radio transmitter
   initialize_radio();
 
-  // Optional motor test
-  Serial.println("|| Press 'M' within 5 seconds for motor test ||");
-
-  unsigned long menuTimeout = millis();
-  while (millis() - menuTimeout < 9000) {
-    if (Serial.available() > 0) {
-      char input = Serial.read();
-      if (input == 'M' || input == 'm') {
-        motor_test();
-        break;
-      }
-    }
-  }
   Serial.println("Skipping motor test - proceeding with mission\n");
 }
 
