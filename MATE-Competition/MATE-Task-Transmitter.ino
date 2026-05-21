@@ -325,15 +325,15 @@ void set_time_manually() {
 
   Serial.print("Hour (0-23): ");
   while (!Serial.available()) { delay(50); }
-  int hour = int day = Serial.readStringUntil('\n').toInt();
+  int hour = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Minute: ");
   while (!Serial.available()) { delay(50); }
-  int minute = int day = Serial.readStringUntil('\n').toInt();
+  int minute = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Second: ");
   while (!Serial.available()) { delay(50); }
-  int second = int day = Serial.readStringUntil('\n').toInt();
+  int second = Serial.readStringUntil('\n').toInt();
 
   // year - 1900 and month - 1 because of how struct tm works in C/C++
   struct tm timeinfo;
