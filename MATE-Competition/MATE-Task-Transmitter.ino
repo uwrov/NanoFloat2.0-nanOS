@@ -64,11 +64,6 @@ RH_RF95 rf95(PIN_RF95_CS, PIN_RF95_G0);
 const int EEPROM_SIZE= 512; 
 const int EEPROM_POSITION_ADDR = 0; 
 
-// NTP
-const char* NTP_SERVER = "pool.ntp.org"; 
-const long GMT_OFFSET = -28800; 
-const int DAYLIGHT_OFFSET = 3600; 
-
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
