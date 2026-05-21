@@ -100,6 +100,8 @@ bool surface();
 bool vertical_profile(int profile_num); 
 void competition_mission(); 
 void initialize_radio(); 
+void radio_send(const String &message);
+String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
@@ -409,7 +411,6 @@ void save_position() {
 void position_reset() {
   piston_position = 0; 
   save_position(); 
-  Serial.println("Piston position reset to 0"); 
 }
 
 // //================================================================================================================================================
@@ -598,12 +599,12 @@ bool move_to_depth(float target_depth_m) {
       return false;
     }
 
-    //Safety: timeout
-    if (millis() - start_time > MAX_MOTOR_TIME) {
-      piston_stop();
-      save_position();
-      return false;
-    }
+    // //Safety: timeout
+    // if (millis() - start_time > MAX_MOTOR_TIME) {
+    //   piston_stop();
+    //   save_position();
+    //   return false;
+    // }
 
     // Primary stop: sensor confirms target depth
     if (abs(depth - target_depth_m) <= sensordepth_tolerance) {
@@ -695,13 +696,15 @@ void loop() {
 
   static bool mission_started = false;
   if (!mission_started && !mission_complete && millis() > 10000UL) {
+    if (radio_send(100)) {
+
+    }
     mission_started = true;
     competition_mission();
   }
 
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
     piston_stop();
-    Serial.println("WARNING: limit switch triggered in loop().");
   }
 
 }
@@ -710,54 +713,39 @@ void loop() {
 // //                                                              Competition Functions
 
 bool vertical_profile(int profile_num) {
-  Serial.print("VERTICAL PROFILE #: ");
+
   Serial.println(profile_num);
 
-  Serial.println("Descending to 0.4 m...");
   if (!move_to_depth(0.4f)) {
-    Serial.println("Profile aborted: could not reach 0.4 m.");
     return false;
   }
 
   if (!hold_depth(0.4f, 30000UL, 7)) {
-    Serial.println("Profile aborted during hold at 0.4 m.");
     return false;
   }
 
-  Serial.println("Descending to 2.5 m...");
   if (!move_to_depth(2.5f)) {
-    Serial.println("Profile aborted: could not reach 2.5 m.");
     return false;
   }
 
   if (!hold_depth(2.5f, 30000UL, 7)) {
-    Serial.println("Profile aborted during hold at 2.5 m.");
     return false;
   }
 
-  Serial.println("Ascending to surface...");
   if (!surface()) {
-    Serial.println("Profile aborted: could not surface.");
     return false;
   }
 
-  Serial.print("Profile #");
-  Serial.print(profile_num);
-  Serial.println(" complete.");
   return true;
 }
 
 void competition_mission() {
-  Serial.println(" COMPETITION MISSION STARTED");
 
   const int NUM_PROFILES = 1;
 
   for (int i = 1; i <= NUM_PROFILES; i++) {
     bool worked = vertical_profile(i);
     if (!worked) {
-      Serial.print("Mission halted at profile #");
-      Serial.println(i);
-      surface();
       mission_complete = true;
       return;
     }
@@ -766,57 +754,17 @@ void competition_mission() {
 
   delay(15000); // can change this depending on testing to see how long we need before data is ready to transmit
 
-  Serial.println("  MISSION COMPLETE — transmitting data");
+  radio_send("  MISSION COMPLETE — transmitting data");
 
   if (radio_available) {
     radiotransmit_data();
   } else {
-    Serial.println("Radio unavailable — switching to WiFi transfer.");
     wifitransmit_data();
   }
 
   mission_complete = true;
 }
 
-//================================================================================================================================================
-//                                                                Motor Test
-
-void motor_test() {
-    mcp.digitalWrite(PIN_MOTOR_1, LOW);
-    mcp.digitalWrite(PIN_MOTOR_2, LOW);
-    
-    Serial.println("-------");
-    Serial.println("Beginning Motor Test. Input either 1, -1, or 0 to run the motor forwards, backwards, or stop, respectively.");
-    Serial.println("Input 'end' to conclude the test.");
-    Serial.println("-------");
- 
-    while (true) {
-      if (Serial.available() > 0) {
-        String direction = Serial.readStringUntil('\n');
-        direction.trim();
-        if (direction == "end") {
-          mcp.digitalWrite(PIN_MOTOR_1, LOW);
-          mcp.digitalWrite(PIN_MOTOR_2, LOW);
-          Serial.println("Motor test concluded");
-          break;
-        } else if (direction == "1") {
-          mcp.digitalWrite(PIN_MOTOR_1, HIGH);
-          mcp.digitalWrite(PIN_MOTOR_2, LOW);
-          Serial.println("Running motor forwards");
-        } else if (direction == "-1") {
-          mcp.digitalWrite(PIN_MOTOR_1, LOW);
-          mcp.digitalWrite(PIN_MOTOR_2, HIGH);
-          Serial.println("Running motor backwards");
-        } else if (direction == "0") {
-          mcp.digitalWrite(PIN_MOTOR_1, LOW);
-          mcp.digitalWrite(PIN_MOTOR_2, LOW);
-          Serial.println("Stopping motor");
-        } else {
-          Serial.println("Input invalid");
-        }
-      }
-    }
-}
 
 //================================================================================================================================================
 //                                                                Encoder Test
