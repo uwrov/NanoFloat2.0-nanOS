@@ -693,14 +693,13 @@ bool surface() {
 // //                                                              Main Loop
 
 void loop() {
-
   static bool mission_started = false;
-  if (!mission_started && !mission_complete && millis() > 10000UL) {
-    if (radio_send(100)) {
-
-    }
-    mission_started = true;
-    competition_mission();
+  if (!mission_started && !mission_complete) {
+      String cmd = radio_receive(100);
+      if (cmd == "start") {
+        mission_started = true;
+        competition_mission();
+      }
   }
 
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
