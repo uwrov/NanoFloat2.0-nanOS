@@ -232,7 +232,7 @@ void setup() {
 
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
-  Serial.println("Type "start" to start competition mission"); 
+  Serial.println("Type 'start' to start competition mission"); 
 
   // Initialize radio transmitter
   initialize_radio();
