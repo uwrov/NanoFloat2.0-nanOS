@@ -80,11 +80,18 @@ void setup() {
   Serial.println("Pressure sensor initialized!");
 
   initialize_radio();
-
-  encoder_test();
 }
 
-void loop() {}
+void loop() {
+  static bool test_started = false;
+  if (!test_started) {
+    String cmd = radio_receive(100);
+    if (cmd == "start") {
+      test_started = true;
+      encoder_test();
+    }
+  }
+}
 
 //================================================================================================================================================
 //                                                              Radio

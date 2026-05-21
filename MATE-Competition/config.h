@@ -8,8 +8,6 @@
 const char* WIFI_SSID = "NanoFloat2.0";
 const char* WIFI_PASSWORD = "fernano";
 
-const char* NTP_SSID = "YourPhoneName";
-const char* NTP_PASSWORD = "YourHotspotPassword";
 
 // ------------------------------------------------------------
 // Encoder Test:
@@ -20,11 +18,10 @@ const char* NTP_PASSWORD = "YourHotspotPassword";
 #define ENCODER_TOLERANCE  0.20f 
 
 // Calibration targets (please replace with actual counts after test is run):                                         
-#define ENCODER_COUNT_0_4M  -1    
+#define ENCODER_COUNT_0_4M  -1     
 #define ENCODER_COUNT_2_5M  -1    
 
 // The magnitude of each encoder step
-#define ENCODER_TEST_STEP  50 
-#define ENCODER_CORRECTION_STEP 10 
+#define ENCODER_CORRECTION_STEP 100000
 
 #endif
