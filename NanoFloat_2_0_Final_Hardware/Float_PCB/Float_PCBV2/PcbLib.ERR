@@ -1,0 +1,17 @@
+Altium Designer System: Library Component Rule Check
+PCB File : PcbLib
+Date     : 4/14/2026
+Time     : 1:12:38 AM
+
+
+Name                Warnings
+------------------------------------------------------------------
+TE_640456-7              Duplicate Primitives: Track (-650mil,-100mil)(-650mil,125.197mil) on Mechanical 13 And Track (-650mil,-100mil)(-650mil,125.197mil) on Mechanical 13
+TE_640456-7              Duplicate Primitives: Track (-650mil,125.197mil)(50mil,125.197mil) on Mechanical 13 And Track (-650mil,125.197mil)(50mil,125.197mil) on Mechanical 13
+TE_640456-7              Duplicate Primitives: Track (50mil,-100mil)(50mil,125.197mil) on Mechanical 13 And Track (50mil,-100mil)(50mil,125.197mil) on Mechanical 13
+
+Fuse-Holder-01110501Z    Duplicate Pad Name On Pads Pad Free-2(250mil,250mil) on Multi-Layer And Pad Free-2(250mil,-250mil) on Multi-Layer
+Fuse-Holder-01110501Z    Duplicate Pad Name On Pads Pad Free-1(-250mil,250mil) on Multi-Layer And Pad Free-1(-250mil,-250mil) on Multi-Layer
+Fuse-Holder-01110501Z    Duplicate Pad Name On Pads Pad Free-2(250mil,0mil) on Top Layer And Pad Free-2(250mil,-250mil) on Multi-Layer
+Fuse-Holder-01110501Z    Duplicate Pad Name On Pads Pad Free-1(-250mil,0mil) on Top Layer And Pad Free-1(-250mil,-250mil) on Multi-Layer
+
