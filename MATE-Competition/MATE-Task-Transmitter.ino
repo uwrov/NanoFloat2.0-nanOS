@@ -386,6 +386,31 @@ void piston_stop() {
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
+void piston_move(int encoder_steps) {
+  int start = piston_position;
+  
+  if (encoder_steps > 0) {
+    piston_out();
+  } else {
+    piston_in();
+  }
+
+  while (abs(piston_position - start) < abs(encoder_steps)) {
+    noInterrupts();
+    piston_position += encoder_delta;
+    encoder_delta = 0;
+    interrupts();
+
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      save_position();
+      return;
+    }
+  }
+
+  piston_stop();
+}
+
 // //================================================================================================================================================
 // //                                                                Encoder ISR
 void IRAM_ATTR encoder_isr() {
