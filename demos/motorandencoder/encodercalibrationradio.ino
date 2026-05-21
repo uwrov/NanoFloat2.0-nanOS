@@ -5,6 +5,8 @@
 #include <Adafruit_MCP23X17.h>
 #include <MS5837.h>
 #include "config.h"
+#include <LittleFS.h>
+#include "FS.h"
 
 // Pins
 const int PIN_ENCODER_A  = D0;
@@ -42,6 +44,8 @@ void encoder_test();
 void initialize_radio();
 void radio_send(const String &message);
 String radio_receive(unsigned long timeout_ms);
+void writeFile(fs::FS &fs, const char* path, const char* message);
+void appendFile(fs::FS &fs, const char* path, const char* message);
 
 void setup() {
   Serial.begin(9600);
@@ -194,10 +198,8 @@ void read_sensor(float &depth, float &pressure) {
 bool run_step(bool extend, float &depth, float &pressure) {
   if (extend) {
     piston_out();
-    radio_send("Extending one step...");
   } else {
     piston_in();
-    radio_send("Retracting one step...");
   }
 
   int step_start = piston_position;
@@ -210,14 +212,12 @@ bool run_step(bool extend, float &depth, float &pressure) {
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      radio_send("Limit switch triggered.");
       return false;
     }
   }
 
   piston_stop();
 
-  radio_send("Stabilizing...");
   float reading_a, reading_b, p;
 
   do {
@@ -235,118 +235,194 @@ bool run_step(bool extend, float &depth, float &pressure) {
   encoder_delta = 0;
   interrupts();
 
-  radio_send("Encoder count: " + String(piston_position));
-  radio_send("Depth: " + String(depth, 3) + " m");
-  radio_send("Pressure: " + String(pressure, 2) + " kPa");
-
   return true;
+}
+
+//================================================================================================================================================
+//                                                              LittleFS Helpers
+
+void writeFile(fs::FS &fs, const char* path, const char* message) {
+  Serial.printf("Writing file: %s\r\n", path);
+  File file = fs.open(path, FILE_WRITE);
+  if (!file) {
+    Serial.println("- failed to open file for writing");
+    return;
+  }
+  if (file.print(message)) {
+    Serial.println("- file written");
+  } else {
+    Serial.println("- write failed");
+  }
+  file.close();
+}
+
+void appendFile(fs::FS &fs, const char* path, const char* message) {
+  Serial.printf("Appending to file: %s\r\n", path);
+  File file = fs.open(path, FILE_APPEND);
+  if (!file) {
+    Serial.println("- failed to open file for appending");
+    return;
+  }
+  if (file.print(message)) {
+    Serial.println("- message appended");
+  } else {
+    Serial.println("- append failed");
+  }
+  file.close();
 }
 
 //================================================================================================================================================
 //                                                              Encoder Test
 
 void encoder_test() {
-  encoder_delta   = 0;
+    encoder_delta   = 0;
   piston_position = 0;
-
-  radio_send("|--------------------------------------------|");
-  radio_send("|         ENCODER CALIBRATION TEST           |");
-  radio_send("|--------------------------------------------|");
-  radio_send("Place the float at the surface before starting.");
-  radio_send("Press any key to zero the encoder and begin...");
-
-  while (radio_receive(100) == "") { delay(50); }
-
-  noInterrupts();
-  encoder_delta = 0;
-  interrupts();
-  piston_position = 0;
-
-  float depth, pressure;
-  read_sensor(depth, pressure);
-
-  radio_send("Encoder zeroed at surface.");
-  radio_send("Surface depth: " + String(depth, 3) + " m");
-  radio_send("Controls:");
-  radio_send("  Any key -> extend one step");
-  radio_send("  'r'     -> retract one step");
-  radio_send("  'x'     -> abort test");
-
+ 
+  radio_send("Encoder calibration starting...");
+  radio_send("Extending to 0.4m...");
+ 
   int count_0_4m = -1;
   int count_2_5m = -1;
-
-  radio_send("|--------------------------------------------|");
-  radio_send("|    PHASE 1: Extend piston to reach 0.4 m   |");
-  radio_send("|--------------------------------------------|");
-
+ 
+  float depth, pressure;
+ 
+  // ── Phase 1: extend until sensor confirms 0.4m ───────────────────────────
+  piston_out();
   while (count_0_4m < 0) {
-    radio_send("Press any key to extend, 'r' to retract, 'x' to abort.");
-
-    String cmd = "";
-    while (cmd == "") {
-      cmd = radio_receive(100);
+ 
+    noInterrupts();
+    piston_position += encoder_delta;
+    encoder_delta = 0;
+    interrupts();
+ 
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      radio_send("Limit switch triggered - aborting.");
+      return;
     }
-    cmd.trim();
-
-    if (cmd == "x") { piston_stop(); radio_send("Test aborted."); return; }
-
-    bool ok = run_step(cmd != "r", depth, pressure);
-    if (!ok) return;
-
+ 
+    read_sensor(depth, pressure);
+ 
     if (depth >= (0.4f - ENCODER_TOLERANCE) && depth <= (0.4f + ENCODER_TOLERANCE)) {
+      piston_stop();
       count_0_4m = piston_position;
-      radio_send("0.4m TARGET CONFIRMED BY SENSOR");
-      radio_send("Encoder count: " + String(count_0_4m));
-      radio_send("Sensor depth: " + String(depth, 3) + " m");
-      radio_send("Pressure: " + String(pressure, 2) + " kPa");
-      radio_send("Proceeding to 2.5m.");
+ 
+      // Wait for sensor to stabilise (same settling pattern as main code)
+      float reading_a, reading_b, p;
+      do {
+        read_sensor(reading_a, p);
+        delay(400);
+        read_sensor(reading_b, p);
+        delay(400);
+      } while (abs(reading_a - reading_b) > 0.01f);
+ 
+      depth = reading_b;
+ 
+      // Flush any encoder ticks that accumulated during settle
+      noInterrupts();
+      piston_position += encoder_delta;
+      encoder_delta = 0;
+      interrupts();
+ 
+      count_0_4m = piston_position;   // use settled position
+ 
+      delay(1000);
     }
+ 
+    delay(100);
   }
-
-  radio_send("|--------------------------------------------|");
-  radio_send("|    PHASE 2: Extend piston to reach 2.5 m   |");
-  radio_send("|--------------------------------------------|");
-
+ 
+  // ── Phase 2: extend until sensor confirms 2.5m ───────────────────────────
+  piston_out();
   while (count_2_5m < 0) {
-    radio_send("Press any key to extend, 'r' to retract, 'x' to abort.");
-
-    String cmd = "";
-    while (cmd == "") {
-      cmd = radio_receive(100);
+ 
+    noInterrupts();
+    piston_position += encoder_delta;
+    encoder_delta = 0;
+    interrupts();
+ 
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      radio_send("Limit switch triggered - aborting.");
+      return;
     }
-    cmd.trim();
-
-    if (cmd == "x") { piston_stop(); radio_send("Test aborted."); return; }
-
-    bool ok = run_step(cmd != "r", depth, pressure);
-    if (!ok) return;
-
+ 
+    read_sensor(depth, pressure);
+ 
     if (depth >= (2.5f - ENCODER_TOLERANCE) && depth <= (2.5f + ENCODER_TOLERANCE)) {
-      count_2_5m = piston_position;
-      radio_send("2.5m TARGET CONFIRMED BY SENSOR");
-      radio_send("Encoder count: " + String(count_2_5m));
-      radio_send("Sensor depth: " + String(depth, 3) + " m");
-      radio_send("Pressure: " + String(pressure, 2) + " kPa");
-      radio_send("Encoders for 2.5m locked.");
+      piston_stop();
+ 
+      // Wait for sensor to stabilise
+      float reading_a, reading_b, p;
+      do {
+        read_sensor(reading_a, p);
+        delay(400);
+        read_sensor(reading_b, p);
+        delay(400);
+      } while (abs(reading_a - reading_b) > 0.01f);
+ 
+      depth = reading_b;
+ 
+      noInterrupts();
+      piston_position += encoder_delta;
+      encoder_delta = 0;
+      interrupts();
+ 
+      count_2_5m = piston_position;   // use settled position
+ 
+      radio_send("2.5m confirmed. Encoder count: " + String(count_2_5m));
+      radio_send("Sensor depth: "                  + String(depth, 3) + " m");
+      delay(1000);
     }
+ 
+    delay(100);
   }
-
-  radio_send("|--------------------------------------------|");
-  radio_send("|          CALIBRATION SUMMARY               |");
-  radio_send("|--------------------------------------------|");
-  radio_send("Copy these values into config.h:");
-
-  if (count_0_4m >= 0) {
-    radio_send("#define ENCODER_COUNT_0_4M    " + String(count_0_4m));
-  } else {
-    radio_send("#define ENCODER_COUNT_0_4M    NOT REACHED");
+ 
+  // ── Phase 3: surface ─────────────────────────────────────────────────────
+  radio_send("Surfacing...");
+  piston_in();
+  while (true) {
+ 
+    noInterrupts();
+    piston_position += encoder_delta;
+    encoder_delta = 0;
+    interrupts();
+ 
+    read_sensor(depth, pressure);
+ 
+    if (depth <= 0.05f) {
+      piston_stop();
+      radio_send("Surfaced.");
+      break;
+    }
+ 
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      radio_send("Limit switch triggered while surfacing.");
+      break;
+    }
+ 
+    delay(100);
   }
-
-  if (count_2_5m >= 0) {
-    radio_send("#define ENCODER_COUNT_2_5M    " + String(count_2_5m));
-  } else {
-    radio_send("#define ENCODER_COUNT_2_5M    NOT REACHED");
+ 
+  // ── Phase 4: save calibration to LittleFS ────────────────────────────────
+  if (!LittleFS.begin(true)) {
+    radio_send("LittleFS mount failed - cannot save calibration.");
+    return;
   }
+ 
+  File file = LittleFS.open("/calibration.txt", FILE_WRITE);
+  if (!file) {
+    radio_send("Failed to open calibration file.");
+    return;
+  }
+ 
+  file.println("NanoFloat Encoder Calibration");
+  file.println("------------------------------");
+  file.print("ENCODER_COUNT_0_4M: ");
+  file.println(count_0_4m >= 0 ? String(count_0_4m) : "NOT REACHED");
+  file.print("ENCODER_COUNT_2_5M: ");
+  file.println(count_2_5m >= 0 ? String(count_2_5m) : "NOT REACHED");
+  file.close();
 
-  radio_send("Encoder calibration complete.");
 }
