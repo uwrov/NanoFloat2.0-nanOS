@@ -732,6 +732,11 @@ bool vertical_profile(int profile_num) {
 }
 
 void competition_mission() {
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  String predescent = String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  radio_send(predescent);
+  save_data(depth, pressure);
 
   const int NUM_PROFILES = 1;
 
