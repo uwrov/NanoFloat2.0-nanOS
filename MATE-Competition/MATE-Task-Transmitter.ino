@@ -718,14 +718,6 @@ bool vertical_profile(int profile_num) {
 
   Serial.println(profile_num);
 
-  if (!move_to_depth(0.4f)) {
-    return false;
-  }
-
-  if (!hold_depth(0.4f, 30000UL, 7)) {
-    return false;
-  }
-
   if (!move_to_depth(2.5f)) {
     return false;
   }
@@ -734,9 +726,17 @@ bool vertical_profile(int profile_num) {
     return false;
   }
 
-  if (!surface()) {
+  if (!move_to_depth(0.4f)) {
     return false;
   }
+
+  if (!hold_depth(0.4f, 30000UL, 7)) {
+    return false;
+  }
+
+  // if (!surface()) {
+  //   return false;
+  // }
 
   return true;
 }
