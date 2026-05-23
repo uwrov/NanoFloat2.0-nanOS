@@ -200,7 +200,7 @@ void setup() {
   }
 
   pressureSensor.setModel(MS5837::MS5837_30BA);  // Bar30 explicit model set
-  pressureSensor.setFluidDensity(1029);            // Freshwater (use 1029 for seawater)
+  pressureSensor.setFluidDensity(1025);            // Freshwater (use 1029 for seawater)
   Serial.println("Pressure sensor initialized!");
 
   // LittleFS
