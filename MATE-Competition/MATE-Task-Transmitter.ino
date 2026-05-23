@@ -35,7 +35,7 @@ const int PIN_MOTOR_2 = 0; //GPA0
 //================================================================================================================================================
 //                                                              Global Variables
 
-const String COMPANY_NUMBER = "PLACEHOLDER"; 
+const String COMPANY_NUMBER = "0416A"; 
 
 volatile int encoder_delta = 0; 
 int piston_position = 0;
