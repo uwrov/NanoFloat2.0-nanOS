@@ -447,13 +447,7 @@ void save_data(float depth, float pressure) {
   }
 
   String line = COMPANY_NUMBER + ", " + timestamp + ", " + String(depth, 2) + ", " + String(pressure, 2) + "\r\n"; 
-  appendFile(LittleFS, LOG_FILE, line.c_str()); 
-
-  Serial.print("Logged | Depth: "); 
-  Serial.print(depth, 2); 
-  Serial.print(" m | Pressure: "); 
-  Serial.print(pressure, 2); 
-  Serial.println(" kPA"); 
+  appendFile(LittleFS, LOG_FILE, line.c_str());  
 }
 
 // //================================================================================================================================================
@@ -578,7 +572,6 @@ bool move_to_depth(float target_depth_m) {
 
   // Look up the calibrated encoder count for this target using 
   long target_count = depth_to_encoder(target_depth_m);
-  Serial.println(target_count);
 
   unsigned long start_time = millis();
   float depth, pressure;
@@ -598,14 +591,12 @@ bool move_to_depth(float target_depth_m) {
     // Safety: limit switch
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      save_position();
       return false;
     }
 
     // //Safety: timeout
     // if (millis() - start_time > MAX_MOTOR_TIME) {
     //   piston_stop();
-    //   save_position();
     //   return false;
     // }
 
@@ -681,7 +672,6 @@ bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
 
   piston_stop();
   Serial.println("Hold complete.");
-  save_position();
   return true;
 }
 
@@ -742,6 +732,11 @@ bool vertical_profile(int profile_num) {
 }
 
 void competition_mission() {
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  radio_send(predescent);
+  save_data(depth, pressure);
 
   const int NUM_PROFILES = 1;
 
