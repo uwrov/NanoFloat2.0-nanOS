@@ -229,6 +229,11 @@ void setup() {
   server.begin();
   Serial.println("\nAP configured successfully!");
 
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  radio_send(predescent);
+  save_data(depth, pressure);
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
@@ -732,12 +737,6 @@ bool vertical_profile(int profile_num) {
 }
 
 void competition_mission() {
-  float depth, pressure;
-  read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
-  radio_send(predescent);
-  save_data(depth, pressure);
-
   const int NUM_PROFILES = 1;
 
   for (int i = 1; i <= NUM_PROFILES; i++) {
