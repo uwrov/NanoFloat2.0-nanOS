@@ -84,7 +84,6 @@ void piston_stop();
 void piston_move(int encoder_steps);
 void IRAM_ATTR encoder_isr(); 
 void set_time_manually(); 
-void save_position(); 
 void position_reset(); 
 void read_sensor(float &depth, float &pressure); 
 void save_data(float depth, float pressure); 
@@ -201,7 +200,7 @@ void setup() {
   }
 
   pressureSensor.setModel(MS5837::MS5837_30BA);  // Bar30 explicit model set
-  pressureSensor.setFluidDensity(997);            // Freshwater (use 1029 for seawater)
+  pressureSensor.setFluidDensity(1029);            // Freshwater (use 1029 for seawater)
   Serial.println("Pressure sensor initialized!");
 
   // LittleFS
@@ -389,7 +388,6 @@ void piston_move(int encoder_steps) {
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      save_position();
       return;
     }
   }
@@ -408,15 +406,14 @@ void IRAM_ATTR encoder_isr() {
 }
 // //================================================================================================================================================
 // //                                                              Save / Reset Position
-
-void save_position() {
-  EEPROM.put(EEPROM_POSITION_ADDR, piston_position); 
-  EEPROM.commit(); 
-}
-
 void position_reset() {
-  piston_position = 0; 
-  save_position(); 
+  piston_in();
+
+  while (digitalRead(PIN_LIMIT_SW) == LOW);
+
+  piston_stop();
+  piston_position = 0;
+  encoder_delta = 0; 
 }
 
 // //================================================================================================================================================
