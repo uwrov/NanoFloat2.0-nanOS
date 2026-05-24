@@ -548,17 +548,19 @@ void piston_cycle_test() {
 
 void loop() {
     static bool test_started = false;
+    
     if (!test_started) {
       float depth, pressure;
       read_sensor(depth, pressure);
       String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
       radio_send(predescent);
       save_data(depth, pressure);
-        String cmd = radio_receive(100);
-        if (cmd == "start") {
-            test_started = true;
-            piston_cycle_test();
-        }
+        
+      String cmd = radio_receive(100);
+      if (cmd == "start") {
+          test_started = true;
+          piston_cycle_test();
+      }
     }
 
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
