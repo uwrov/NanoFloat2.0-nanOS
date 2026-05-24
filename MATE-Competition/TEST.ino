@@ -67,6 +67,8 @@ const int EEPROM_POSITION_ADDR = 0;
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
+
+
 // Define RFM95 frequency
 #define RF95_FREQ 915.0
 #define TX_INTERVAL 5000
@@ -221,6 +223,12 @@ void setup() {
 
   set_time_manually(); 
 
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + hour + ":" + minute + ":" + second + " depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  radio_send(predescent);
+  save_data(depth, pressure);
+
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
 
@@ -345,11 +353,9 @@ void set_time_manually() {
 // //================================================================================================================================================
 // //                                                            Pre-descent packet                       
 
-float depth, pressure;
-read_sensor(depth, pressure);
-String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + hour + ":" + minute + ":" + second + " depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
-radio_send(predescent);
-save_data(depth, pressure);
+String predescent() {
+ 
+
 // //================================================================================================================================================
 // //                                                              Piston Control Functions
 
@@ -504,6 +510,7 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                              Piston Cycle Test (for debugging)
 void piston_cycle_test() {
+  
   radio_send("Starting piston cycle test...");
   radio_send("Extending to full extension...");
 
