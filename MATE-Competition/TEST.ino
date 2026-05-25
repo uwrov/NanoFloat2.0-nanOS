@@ -100,6 +100,7 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
+String get_timestamp(); 
 
 
 //================================================================================================================================================
@@ -219,13 +220,9 @@ void setup() {
     Serial.println("Log file already exists, appending"); 
   }
 
-  set_time_manually(); 
-
-  float depth, pressure;
-  read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
-  radio_send(predescent);
-  save_data(depth, pressure);
+  
+  
+  set_time_manually();
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
@@ -348,17 +345,27 @@ void set_time_manually() {
   Serial.println("Time set successfully!");
 }
 
+String get_timestamp() {
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    char buf[30];
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    return String(buf);
+  }
+  return String(millis());
+}
+
 // //================================================================================================================================================
 // //                                                              Piston Control Functions
 
 void piston_out() {
-  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
-  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
 }
 
 void piston_in() {
-  mcp.digitalWrite(PIN_MOTOR_1, LOW);
-  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
 void piston_stop() {
@@ -555,6 +562,14 @@ void piston_cycle_test() {
 void loop() {
     static bool test_started = false;
     if (!test_started) {
+        float depth, pressure;
+        read_sensor(depth, pressure);
+        String predescent = COMPANY_NUMBER + ", PRE-DESCENT, " + get_timestamp() + "depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+        radio_send(predescent);
+        Serial.println(depth);
+        Serial.println(pressure); 
+        Serial.println(get_timestamp());  
+        save_data(depth, pressure);
         String cmd = radio_receive(100);
         if (cmd == "start") {
             test_started = true;
@@ -566,4 +581,3 @@ void loop() {
     piston_stop();
   }
 }
-
