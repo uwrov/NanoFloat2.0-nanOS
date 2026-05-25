@@ -67,14 +67,11 @@ const int EEPROM_POSITION_ADDR = 0;
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
-
-
 // Define RFM95 frequency
 #define RF95_FREQ 915.0
 #define TX_INTERVAL 5000
 
 #define FORMAT_LITTLEFS_IF_FAILED true
-
 
 //================================================================================================================================================
 //                                                              Function Prototypes
@@ -102,6 +99,9 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
+int g_hour;
+int g_minute;
+int g_second;
 
 
 //================================================================================================================================================
@@ -205,6 +205,9 @@ void setup() {
   pressureSensor.setFluidDensity(1025);            // Freshwater (use 1029 for seawater)
   Serial.println("Pressure sensor initialized!");
 
+  // Initialize radio transmitter
+  initialize_radio();
+
   // LittleFS
   if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
     Serial.println("LittleFS Mount Failed");
@@ -225,15 +228,12 @@ void setup() {
 
   float depth, pressure;
   read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + hour + ":" + minute + ":" + second + " depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
   radio_send(predescent);
   save_data(depth, pressure);
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
-
-  // Initialize radio transmitter
-  initialize_radio();
 
 }
 
@@ -323,24 +323,24 @@ void set_time_manually() {
 
   Serial.print("Hour (0-23): ");
   while (!Serial.available()) { delay(50); }
-  int hour = Serial.readStringUntil('\n').toInt();
+  g_hour = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Minute: ");
   while (!Serial.available()) { delay(50); }
-  int minute = Serial.readStringUntil('\n').toInt();
+  g_minute = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Second: ");
   while (!Serial.available()) { delay(50); }
-  int second = Serial.readStringUntil('\n').toInt();
+  g_second = Serial.readStringUntil('\n').toInt();
 
   // year - 1900 and month - 1 because of how struct tm works in C/C++
   struct tm timeinfo;
   timeinfo.tm_year  = year - 1900;
   timeinfo.tm_mon   = month - 1; 
   timeinfo.tm_mday  = day;
-  timeinfo.tm_hour  = hour;
-  timeinfo.tm_min   = minute;
-  timeinfo.tm_sec   = second;
+  timeinfo.tm_hour  = g_hour;
+  timeinfo.tm_min   = g_minute;
+  timeinfo.tm_sec   = g_second;
   timeinfo.tm_isdst = 0;
 
   time_t t = mktime(&timeinfo);
@@ -348,19 +348,20 @@ void set_time_manually() {
   settimeofday(&now, NULL);
 
   Serial.println("Time set successfully!");
+  
 }
 
 // //================================================================================================================================================
 // //                                                              Piston Control Functions
 
 void piston_out() {
-  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
-  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
 }
 
 void piston_in() {
-  mcp.digitalWrite(PIN_MOTOR_1, LOW);
-  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
 void piston_stop() {
@@ -570,4 +571,3 @@ void loop() {
     piston_stop();
   }
 }
-
