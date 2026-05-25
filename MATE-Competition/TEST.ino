@@ -228,7 +228,7 @@ void setup() {
 
   float depth, pressure;
   read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  String predescent = COMPANY_NUMBER + " time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
   radio_send(predescent);
   save_data(depth, pressure);
 
