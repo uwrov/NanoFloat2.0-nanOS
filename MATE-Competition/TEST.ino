@@ -356,12 +356,18 @@ void set_time_manually() {
 
 void piston_out() {
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
-  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
 void piston_in() {
-  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
+  
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
 }
 
 void piston_stop() {
