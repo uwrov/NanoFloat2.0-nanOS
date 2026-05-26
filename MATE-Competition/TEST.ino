@@ -403,9 +403,9 @@ void piston_move(int encoder_steps) {
 // //                                                                Encoder ISR
 void IRAM_ATTR encoder_isr() {
   if (digitalRead(PIN_ENCODER_A) > digitalRead(PIN_ENCODER_B)) {
-    encoder_delta++; 
-  } else {
     encoder_delta--; 
+  } else {
+    encoder_delta++; 
   }
 }
 // //================================================================================================================================================
