@@ -29,8 +29,8 @@ const int PIN_RF95_MOSI = D10;    // RFM95 Serial In
 
 //MCP23017 pin assignments
 const int MCP_ADDR = 0x20; // I2C Address
-const int PIN_MOTOR_1 = 1; //GPA1
-const int PIN_MOTOR_2 = 0; //GPA0
+const int PIN_MOTOR_1 = 13; //GPB4
+const int PIN_MOTOR_2 = 12; //GPB5
 
 //================================================================================================================================================
 //                                                              Global Variables
