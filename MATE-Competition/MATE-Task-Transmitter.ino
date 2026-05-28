@@ -363,7 +363,7 @@ void set_time_manually() {
 // //================================================================================================================================================
 // //                                                              Piston Control Functions
 
-vvoid piston_out() {
+void piston_out() {
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
 
