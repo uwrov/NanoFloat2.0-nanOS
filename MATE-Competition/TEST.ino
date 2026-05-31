@@ -99,13 +99,9 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-<<<<<<< HEAD
-String get_timestamp(); 
-=======
 int g_hour;
 int g_minute;
 int g_second;
->>>>>>> 49a660f9d365d0c49c971d5cbe6b7c886e47da26
 
 
 //================================================================================================================================================
@@ -370,14 +366,6 @@ String get_timestamp() {
 
 void piston_out() {
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
-<<<<<<< HEAD
-  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
-}
-
-void piston_in() {
-  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
-  mcp.digitalWrite(PIN_MOTOR_2, LOW);
-=======
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
 
   mcp.digitalWrite(PIN_MOTOR_1, HIGH);
@@ -390,7 +378,6 @@ void piston_in() {
   
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
   mcp.digitalWrite(PIN_MOTOR_2, HIGH);
->>>>>>> 49a660f9d365d0c49c971d5cbe6b7c886e47da26
 }
 
 void piston_stop() {
