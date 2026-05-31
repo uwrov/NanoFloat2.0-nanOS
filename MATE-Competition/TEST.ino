@@ -228,11 +228,6 @@ void setup() {
     Serial.println("Log file already exists, appending"); 
   }
 
-<<<<<<< HEAD
-  
-  
-  set_time_manually();
-=======
   set_time_manually(); 
 
   float depth, pressure;
@@ -240,7 +235,6 @@ void setup() {
   String predescent = COMPANY_NUMBER + " time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
   radio_send(predescent);
   save_data(depth, pressure);
->>>>>>> 0cc52e8ccced7ac72d1a21651df8198a79616133
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
