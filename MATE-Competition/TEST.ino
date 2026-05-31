@@ -67,6 +67,8 @@ const int EEPROM_POSITION_ADDR = 0;
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
+
+
 // Define RFM95 frequency
 #define RF95_FREQ 915.0
 #define TX_INTERVAL 5000
@@ -220,9 +222,19 @@ void setup() {
     Serial.println("Log file already exists, appending"); 
   }
 
+<<<<<<< HEAD
   
   
   set_time_manually();
+=======
+  set_time_manually(); 
+
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + hour + ":" + minute + ":" + second + " depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  radio_send(predescent);
+  save_data(depth, pressure);
+>>>>>>> 0cc52e8ccced7ac72d1a21651df8198a79616133
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
@@ -298,7 +310,7 @@ String radio_receive(unsigned long timeout_ms) {
   }
   return "";
 }
-
+        
 // //================================================================================================================================================
 // //                                                              Setting Time
 void set_time_manually() {
@@ -509,6 +521,7 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                              Piston Cycle Test (for debugging)
 void piston_cycle_test() {
+  
   radio_send("Starting piston cycle test...");
   radio_send("Extending to full extension...");
 
@@ -561,20 +574,13 @@ void piston_cycle_test() {
 
 void loop() {
     static bool test_started = false;
+    
     if (!test_started) {
-        float depth, pressure;
-        read_sensor(depth, pressure);
-        String predescent = COMPANY_NUMBER + ", PRE-DESCENT, " + get_timestamp() + "depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
-        radio_send(predescent);
-        Serial.println(depth);
-        Serial.println(pressure); 
-        Serial.println(get_timestamp());  
-        save_data(depth, pressure);
-        String cmd = radio_receive(100);
-        if (cmd == "start") {
-            test_started = true;
-            piston_cycle_test();
-        }
+      String cmd = radio_receive(100);
+      if (cmd == "start") {
+          test_started = true;
+          piston_cycle_test();
+      }
     }
 
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
