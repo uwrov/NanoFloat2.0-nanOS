@@ -29,8 +29,8 @@ const int PIN_RF95_MOSI = D10;    // RFM95 Serial In
 
 //MCP23017 pin assignments
 const int MCP_ADDR = 0x20; // I2C Address
-const int PIN_MOTOR_1 = 1; //GPA1
-const int PIN_MOTOR_2 = 0; //GPA0
+const int PIN_MOTOR_1 = 13; //GPB4
+const int PIN_MOTOR_2 = 12; //GPB5
 
 //================================================================================================================================================
 //                                                              Global Variables
@@ -100,7 +100,9 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-
+int g_hour;
+int g_minute;
+int g_second;
 
 //================================================================================================================================================
 //                                                              Depth and Encoder Mapped Counts
@@ -200,8 +202,11 @@ void setup() {
   }
 
   pressureSensor.setModel(MS5837::MS5837_30BA);  // Bar30 explicit model set
-  pressureSensor.setFluidDensity(1025);            // Freshwater (use 1029 for seawater)
+  pressureSensor.setFluidDensity(997);         // 997 for freshwater, 1025 for seawater (MATE ice tank)
   Serial.println("Pressure sensor initialized!");
+
+  // Initialize radio transmitter
+  initialize_radio();
 
   // LittleFS
   if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
@@ -231,15 +236,12 @@ void setup() {
 
   float depth, pressure;
   read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  String predescent = COMPANY_NUMBER + " time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
   radio_send(predescent);
   save_data(depth, pressure);
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
-
-  // Initialize radio transmitter
-  initialize_radio();
 
 }
 
@@ -329,24 +331,24 @@ void set_time_manually() {
 
   Serial.print("Hour (0-23): ");
   while (!Serial.available()) { delay(50); }
-  int hour = Serial.readStringUntil('\n').toInt();
+  g_hour = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Minute: ");
   while (!Serial.available()) { delay(50); }
-  int minute = Serial.readStringUntil('\n').toInt();
+  g_minute = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Second: ");
   while (!Serial.available()) { delay(50); }
-  int second = Serial.readStringUntil('\n').toInt();
+  g_second = Serial.readStringUntil('\n').toInt();
 
   // year - 1900 and month - 1 because of how struct tm works in C/C++
   struct tm timeinfo;
   timeinfo.tm_year  = year - 1900;
   timeinfo.tm_mon   = month - 1; 
   timeinfo.tm_mday  = day;
-  timeinfo.tm_hour  = hour;
-  timeinfo.tm_min   = minute;
-  timeinfo.tm_sec   = second;
+  timeinfo.tm_hour  = g_hour;
+  timeinfo.tm_min   = g_minute;
+  timeinfo.tm_sec   = g_second;
   timeinfo.tm_isdst = 0;
 
   time_t t = mktime(&timeinfo);
@@ -363,12 +365,18 @@ void set_time_manually() {
 
 void piston_out() {
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
-  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
 void piston_in() {
-  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
+  
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
 }
 
 void piston_stop() {
@@ -760,6 +768,3 @@ void competition_mission() {
 
   mission_complete = true;
 }
-
-
-

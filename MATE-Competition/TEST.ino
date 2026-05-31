@@ -29,8 +29,8 @@ const int PIN_RF95_MOSI = D10;    // RFM95 Serial In
 
 //MCP23017 pin assignments
 const int MCP_ADDR = 0x20; // I2C Address
-const int PIN_MOTOR_1 = 1; //GPA1
-const int PIN_MOTOR_2 = 0; //GPA0
+const int PIN_MOTOR_1 = 13; //GPB4
+const int PIN_MOTOR_2 = 12; //GPB5
 
 //================================================================================================================================================
 //                                                              Global Variables
@@ -67,14 +67,11 @@ const int EEPROM_POSITION_ADDR = 0;
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
-
-
 // Define RFM95 frequency
 #define RF95_FREQ 915.0
 #define TX_INTERVAL 5000
 
 #define FORMAT_LITTLEFS_IF_FAILED true
-
 
 //================================================================================================================================================
 //                                                              Function Prototypes
@@ -102,7 +99,13 @@ String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
+<<<<<<< HEAD
 String get_timestamp(); 
+=======
+int g_hour;
+int g_minute;
+int g_second;
+>>>>>>> 49a660f9d365d0c49c971d5cbe6b7c886e47da26
 
 
 //================================================================================================================================================
@@ -206,6 +209,9 @@ void setup() {
   pressureSensor.setFluidDensity(1025);            // Freshwater (use 1029 for seawater)
   Serial.println("Pressure sensor initialized!");
 
+  // Initialize radio transmitter
+  initialize_radio();
+
   // LittleFS
   if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
     Serial.println("LittleFS Mount Failed");
@@ -231,16 +237,13 @@ void setup() {
 
   float depth, pressure;
   read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + ", PRE-DESCENT, time: " + hour + ":" + minute + ":" + second + " depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  String predescent = COMPANY_NUMBER + " time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
   radio_send(predescent);
   save_data(depth, pressure);
 >>>>>>> 0cc52e8ccced7ac72d1a21651df8198a79616133
 
   Serial.println("|| SYSTEM READY FOR TASK EXECUTION ||");
   Serial.println("Type 'start' to start competition mission"); 
-
-  // Initialize radio transmitter
-  initialize_radio();
 
 }
 
@@ -330,24 +333,24 @@ void set_time_manually() {
 
   Serial.print("Hour (0-23): ");
   while (!Serial.available()) { delay(50); }
-  int hour = Serial.readStringUntil('\n').toInt();
+  g_hour = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Minute: ");
   while (!Serial.available()) { delay(50); }
-  int minute = Serial.readStringUntil('\n').toInt();
+  g_minute = Serial.readStringUntil('\n').toInt();
 
   Serial.print("Second: ");
   while (!Serial.available()) { delay(50); }
-  int second = Serial.readStringUntil('\n').toInt();
+  g_second = Serial.readStringUntil('\n').toInt();
 
   // year - 1900 and month - 1 because of how struct tm works in C/C++
   struct tm timeinfo;
   timeinfo.tm_year  = year - 1900;
   timeinfo.tm_mon   = month - 1; 
   timeinfo.tm_mday  = day;
-  timeinfo.tm_hour  = hour;
-  timeinfo.tm_min   = minute;
-  timeinfo.tm_sec   = second;
+  timeinfo.tm_hour  = g_hour;
+  timeinfo.tm_min   = g_minute;
+  timeinfo.tm_sec   = g_second;
   timeinfo.tm_isdst = 0;
 
   time_t t = mktime(&timeinfo);
@@ -355,6 +358,7 @@ void set_time_manually() {
   settimeofday(&now, NULL);
 
   Serial.println("Time set successfully!");
+  
 }
 
 String get_timestamp() {
@@ -372,12 +376,27 @@ String get_timestamp() {
 
 void piston_out() {
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
+<<<<<<< HEAD
   mcp.digitalWrite(PIN_MOTOR_2, HIGH);
 }
 
 void piston_in() {
   mcp.digitalWrite(PIN_MOTOR_1, HIGH);
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
+=======
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+}
+
+void piston_in() {
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+  
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
+>>>>>>> 49a660f9d365d0c49c971d5cbe6b7c886e47da26
 }
 
 void piston_stop() {
@@ -413,9 +432,9 @@ void piston_move(int encoder_steps) {
 // //                                                                Encoder ISR
 void IRAM_ATTR encoder_isr() {
   if (digitalRead(PIN_ENCODER_A) > digitalRead(PIN_ENCODER_B)) {
-    encoder_delta++; 
-  } else {
     encoder_delta--; 
+  } else {
+    encoder_delta++; 
   }
 }
 // //================================================================================================================================================
