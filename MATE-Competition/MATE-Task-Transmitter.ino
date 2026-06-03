@@ -616,7 +616,6 @@ bool move_to_depth(float target_depth_m) {
     // Primary stop: sensor confirms target depth
     if (abs(depth - target_depth_m) <= sensordepth_tolerance) {
       piston_stop();
-      save_position();
       return true;
     }
 
@@ -663,7 +662,6 @@ bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      save_position();
       return false;
     }
 
