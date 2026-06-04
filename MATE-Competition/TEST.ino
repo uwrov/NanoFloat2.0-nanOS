@@ -67,11 +67,13 @@ const int EEPROM_POSITION_ADDR = 0;
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
+
 // Define RFM95 frequency
 #define RF95_FREQ 915.0
 #define TX_INTERVAL 5000
 
 #define FORMAT_LITTLEFS_IF_FAILED true
+
 
 //================================================================================================================================================
 //                                                              Function Prototypes
@@ -109,7 +111,6 @@ int g_second;
 
 long depth_to_encoder(float depth_m) {
   // Direct lookup for the three competition targets
-  // Shallower depth = more extension = greater encoder count
   if (depth_m <= 0.4f){
     return ENCODER_COUNT_0_4M;
   }
@@ -179,6 +180,18 @@ void setup() {
   // Initialize motor to stopped
   piston_stop();
 
+  Serial.println("Direction test - extending for 1 second...");
+  piston_out();
+  delay(1000);
+  piston_stop();
+  noInterrupts();
+  piston_position += encoder_delta;
+  encoder_delta = 0;
+  interrupts();
+  Serial.print("Encoder after extend: ");
+  Serial.println(piston_position);
+  piston_position = 0;
+
   // EEPROM Set-Up
   EEPROM.begin(EEPROM_SIZE); 
   EEPROM.get(EEPROM_POSITION_ADDR, piston_position); 
@@ -203,7 +216,7 @@ void setup() {
   }
 
   pressureSensor.setModel(MS5837::MS5837_30BA);  // Bar30 explicit model set
-  pressureSensor.setFluidDensity(1025);            // Freshwater (use 1029 for seawater)
+  pressureSensor.setFluidDensity(1025);            // 997 Freshwater (use 1025 for seawater)
   Serial.println("Pressure sensor initialized!");
 
   // Initialize radio transmitter
@@ -229,7 +242,7 @@ void setup() {
 
   float depth, pressure;
   read_sensor(depth, pressure);
-  String predescent = COMPANY_NUMBER + " time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + " UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
+  String predescent = COMPANY_NUMBER + " time: " + String(g_hour) + ":" + String(g_minute) + ":" + String(g_second) + "UTC depth: " + String(depth, 2) + "m, pressure: " + String(pressure, 2) + "kPa";
   radio_send(predescent);
   save_data(depth, pressure);
 
@@ -350,16 +363,6 @@ void set_time_manually() {
 
   Serial.println("Time set successfully!");
   
-}
-
-String get_timestamp() {
-  struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
-    char buf[30];
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
-    return String(buf);
-  }
-  return String(millis());
 }
 
 // //================================================================================================================================================
@@ -522,14 +525,15 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                              Piston Cycle Test (for debugging)
 void piston_cycle_test() {
-
+  
   radio_send("Starting piston cycle test...");
-  radio_send("Descending (retracting) to 2.5 m...");
+  radio_send("Retracting to full retraction...");
 
-  long target_2_5m = ENCODER_COUNT_2_5M;
+  // Extend to full extension using encoder count
+  int target_extend = ENCODER_COUNT_2_5M;
   piston_in();
 
-  while (piston_position > target_2_5m) {
+  while (piston_position < target_extend) {
     noInterrupts();
     piston_position += encoder_delta;
     encoder_delta = 0;
@@ -537,37 +541,31 @@ void piston_cycle_test() {
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      radio_send("Limit switch triggered unexpectedly.");
+      radio_send("Limit switch triggered during retraction.");
       return;
     }
   }
 
   piston_stop();
-
-  radio_send("Reached 2.5 m target.");
-  radio_send("Encoder count: " + String(piston_position));
-
+  radio_send("Full retraction reached. Encoder count: " + String(piston_position));
   delay(2000);
 
-  radio_send("Ascending (extending) to 0.4 m...");
-
-  long target_0_4m = ENCODER_COUNT_0_4M;
+  // Extend to full 
+  radio_send("Extending to full extension...");
   piston_out();
 
-  while (piston_position < target_0_4m) {
+  while (piston_position > 0) {
     noInterrupts();
     piston_position += encoder_delta;
     encoder_delta = 0;
     interrupts();
+    }
   }
 
   piston_stop();
-
-  radio_send("Reached 0.4 m target.");
-  radio_send("Encoder count: " + String(piston_position));
-
-  radio_send("Piston cycle test complete.");
+  radio_send("Cycle complete. Encoder count: " + String(piston_position));
 }
+
 // //================================================================================================================================================
 // //                                                              Main Loop
 
