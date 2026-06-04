@@ -524,7 +524,7 @@ void radiotransmit_data() {
 void piston_cycle_test() {
 
   radio_send("Starting piston cycle test...");
-  radio_send("Descending to 2.5 m...");
+  radio_send("Descending (retracting) to 2.5 m...");
 
   long target_2_5m = ENCODER_COUNT_2_5M;
   piston_in();
@@ -549,7 +549,7 @@ void piston_cycle_test() {
 
   delay(2000);
 
-  radio_send("Ascending to 0.4 m...");
+  radio_send("Ascending (extending) to 0.4 m...");
 
   long target_0_4m = ENCODER_COUNT_0_4M;
   piston_out();
