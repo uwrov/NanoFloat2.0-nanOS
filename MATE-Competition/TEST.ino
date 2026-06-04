@@ -533,7 +533,7 @@ void piston_cycle_test() {
   int target_extend = ENCODER_COUNT_2_5M;
   piston_in();
 
-  while (piston_position < target_extend) {
+  while (piston_position > target_extend) {
     noInterrupts();
     piston_position += encoder_delta;
     encoder_delta = 0;
@@ -554,7 +554,7 @@ void piston_cycle_test() {
   radio_send("Extending to full extension...");
   piston_out();
 
-  while (piston_position > 0) {
+  while (piston_position < 0) {
     noInterrupts();
     piston_position += encoder_delta;
     encoder_delta = 0;
