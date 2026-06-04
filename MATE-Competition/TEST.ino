@@ -109,6 +109,7 @@ int g_second;
 
 long depth_to_encoder(float depth_m) {
   // Direct lookup for the three competition targets
+  // Shallower depth = more extension = greater encoder count
   if (depth_m <= 0.4f){
     return ENCODER_COUNT_0_4M;
   }
@@ -521,15 +522,14 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                              Piston Cycle Test (for debugging)
 void piston_cycle_test() {
-  
+
   radio_send("Starting piston cycle test...");
-  radio_send("Extending to full extension...");
+  radio_send("Descending to 2.5 m...");
 
-  // Extend to full extension using encoder count
-  int target_extend = ENCODER_COUNT_2_5M;
-  piston_out();
+  long target_2_5m = ENCODER_COUNT_2_5M;
+  piston_in();
 
-  while (piston_position < target_extend) {
+  while (piston_position > target_2_5m) {
     noInterrupts();
     piston_position += encoder_delta;
     encoder_delta = 0;
@@ -537,38 +537,37 @@ void piston_cycle_test() {
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      radio_send("Limit switch triggered during extension.");
+      radio_send("Limit switch triggered unexpectedly.");
       return;
     }
   }
 
   piston_stop();
-  radio_send("Full extension reached. Encoder count: " + String(piston_position));
+
+  radio_send("Reached 2.5 m target.");
+  radio_send("Encoder count: " + String(piston_position));
+
   delay(2000);
 
-  // Retract to full retraction
-  radio_send("Retracting to full retraction...");
-  piston_in();
+  radio_send("Ascending to 0.4 m...");
 
-  while (piston_position > 0) {
+  long target_0_4m = ENCODER_COUNT_0_4M;
+  piston_out();
+
+  while (piston_position < target_0_4m) {
     noInterrupts();
     piston_position += encoder_delta;
     encoder_delta = 0;
     interrupts();
-
-    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
-      piston_stop();
-      piston_position = 0;
-      radio_send("Limit switch triggered - fully retracted. Encoder reset to 0.");
-      delay(2000);
-      break;
-    }
   }
 
   piston_stop();
-  radio_send("Cycle complete. Encoder count: " + String(piston_position));
-}
 
+  radio_send("Reached 0.4 m target.");
+  radio_send("Encoder count: " + String(piston_position));
+
+  radio_send("Piston cycle test complete.");
+}
 // //================================================================================================================================================
 // //                                                              Main Loop
 
