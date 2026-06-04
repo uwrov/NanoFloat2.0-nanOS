@@ -559,7 +559,6 @@ void piston_cycle_test() {
     piston_position += encoder_delta;
     encoder_delta = 0;
     interrupts();
-    }
   }
 
   piston_stop();
