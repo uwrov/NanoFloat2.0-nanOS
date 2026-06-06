@@ -182,6 +182,76 @@ void setup() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                                     Initialize MCP23017 Expander
+
+void initialize_mcp() {
+  if (!mcp.begin_I2C(MCP_ADDR)) {
+    Serial.println("ERROR: MCP23017 not found."); 
+    while(1) { 
+      delay(1000); 
+    }
+  }
+
+  mcp.pinMode(PIN_MOTOR_1, OUTPUT); 
+  mcp.pinMode(PIN_MOTOR_2, OUTPUT); 
+  Serial.println("MCP23017 succesfully initialized!"); 
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                               Initialize RFM9x LoRa Radio Transmitter
+
+void initialize_radio() {
+  digitalWrite(PIN_RF95_RST, HIGH);
+  Serial.println("\nInitializing RFM9x LoRa Radio Transmitter...");
+
+  digitalWrite(PIN_RF95_RST, LOW);
+  delay(10);
+  digitalWrite(PIN_RF95_RST, HIGH);
+  delay(10);
+
+  if (!rf95.init()) {
+    Serial.println("NanoFloat radio init failed");
+    radio_available = false;
+    return;
+  }
+  Serial.println("NanoFloat radio init OK!");
+
+  if(!rf95.setFrequency(RF95_FREQ)) {
+    Serial.println("setFrequency failed");
+    radio_available = false;
+    return;
+  }
+
+  Serial.print("Set Freq to: ");
+  Serial.println(RF95_FREQ);
+
+  rf95.setTxPower(23, false);
+  radio_available = true;
+  Serial.println("NanoFloat radio initialized!");
+}
+
+void radio_send(const String &message) {
+  if (!radio_available) return;
+  char buf[120];
+  message.toCharArray(buf, sizeof(buf));
+  rf95.send((uint8_t *)buf, strlen(buf) + 1);
+  rf95.waitPacketSent();
+}
+
+String radio_receive(unsigned long timeout_ms) {
+  unsigned long start = millis();
+  while (millis() - start < timeout_ms) {
+    if (rf95.available()) {
+      uint8_t buf[120];
+      uint8_t len = sizeof(buf);
+      if (rf95.recv(buf, &len)) {
+        return String((char *)buf);
+      }
+    }
+  }
+  return "";
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                        Setting Time
 
 void set_time_manually() {
