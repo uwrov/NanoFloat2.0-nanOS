@@ -1,1 +1,280 @@
+#include <Arduino.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <EEPROM.h>
+#include <Adafruit_MCP23X17.h>
+#include <MS5837.h>
+#include <RH_RF95.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+#include "FS.h"
+#include <LittleFS.h>
+#include "time.h"
+#include "taskconfig.h"
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                          Pin Definitions (XIAO ESP32-C6 & MCP23017)
+
+// Direct GPIO pin assignments
+const int PIN_ENCODER_A = D0;   // Encoder A phase
+const int PIN_ENCODER_B = D1;   // Encoder B phase
+const int PIN_RF95_CS = D2;     // RFM95 CS
+const int PIN_RF95_G0 = D3;     // RFM95 Interrupt
+const int PIN_RF95_RST = D6;    // RFM95 Reset
+const int PIN_LIMIT_SW = D7;    // Limit Switch Input 
+const int PIN_RF95_SCK = D8;    // RFM95 Clock
+const int PIN_RF95_MISO = D9;   // RFM95 Serial Out 
+const int PIN_RF95_MOSI = D10;  // RFM95 Serial In 
+
+//MCP23017 pin assignments
+const int MCP_ADDR = 0x20; // I2C Address
+const int PIN_MOTOR_1 = 13; //GPB4
+const int PIN_MOTOR_2 = 12; //GPB5
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                                 Global Variables
+
+const String COMPANY_NUMBER = "0416A"; 
+
+// Depth control parameters
+volatile int encoder_delta = 0; 
+int piston_position = 0;
+float current_depth_m = 0.0;
+float target_depth_m = 0.0;
+
+// Hardware/Communication Objects
+MS5837 pressureSensor;
+Adafruit_MCP23X17 mcp;
+RH_RF95 rf95(PIN_RF95_CS, PIN_RF95_G0);
+WiFiServer server(80);
+
+// EEPROM
+const int EEPROM_SIZE= 512; 
+const int EEPROM_POSITION_ADDR = 0; 
+
+// LittleFS log file 
+const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
+
+// Define commuication/data
+#define FORMAT_LITTLEFS_IF_FAILED true
+#define RF95_FREQ 915.0
+#define TX_INTERVAL 5000
+
+// Boolean flags
+bool mission_complete = false;
+bool radio_available = false; 
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                                      Functions
+
+// Hardware initialization
+void initialize_mcp(); 
+void initialize_radio(); 
+
+// Setting time 
+int g_hour;
+int g_minute;
+int g_second;
+void set_time_manually(); 
+
+// Communication
+void radiotransmit_data(); 
+void wifitransmit_data();
+void radio_send(const String &message);
+String radio_receive(unsigned long timeout_ms);
+
+// Sensor data collection
+void read_sensor_isr(float &depth, float &pressure); // Collects data at 5 second intervals (debug)
+void save_data(float depth, float pressure); 
+void writeFile(fs::FS &fs, const char* path, const char* message);
+void appendFile(fs::FS &fs, const char* path, const char* message);
+void data_prompt() // Parameters and implementation needed
+
+// Piston movement 
+void piston_out();
+void piston_in();
+void IRAM_ATTR encoder_isr(); 
+float encoder_position_scale(long counts); // Implementation needed 
+void position_reset(); 
+bool PID_depth(); // Parameters and implementation needed
+bool hold_depth(); // Parameters and implementation needed
+void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
+
+/* Additional for future use; based on encoder counts
+long depth_to_encoder(float depth_m);
+void move_to_depth(float target_depth_m); */
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                                          Setup
+
+void setup() {
+  // Initialize Serial
+  Serial.begin(9600);
+  delay(1000);
+  Serial.println("Setting up NanoFloat 2.0:");
+
+  // Initialize I2C bus
+  Wire.begin();
+
+  // Configure direct GPIO pins
+  pinMode(PIN_ENCODER_A, INPUT_PULLUP);
+  pinMode(PIN_ENCODER_B, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_A), encoder_isr, RISING); 
+  pinMode(PIN_LIMIT_SW, INPUT_PULLUP);
+  pinMode(PIN_RF95_RST, OUTPUT);
+
+  // Initialize MCP23017
+  initialize_mcp(); 
+
+  // Initialize motor to stopped
+  piston_stop();
+
+  // Initialize EEPROM (to store piston position if battery shuts off)
+  EEPROM.begin(EEPROM_SIZE); 
+  EEPROM.get(EEPROM_POSITION_ADDR, piston_position); 
+  if (piston_position < 0) {
+    piston_position = 0;
+  }
+  Serial.print("Restored piston position: "); 
+  Serial.println(piston_position); 
+
+  // Initialize MS5837 Bar-30 sensor
+  Serial.println("\n Initializing MS5837 pressure sensor...");
+  int attempts = 0;
+  while (!pressureSensor.init() && attempts < 10) {
+    Serial.println("Pressure sensor init failed! Retrying...");
+    delay(2000);
+    attempts++;
+  } 
+  if (attempts >= 10) {
+      Serial.println("ERROR: Could not initialize pressure sensor!");
+      while(1) { delay(1000); }
+  }
+
+  pressureSensor.setModel(MS5837::MS5837_30BA);   // -> Bar30 model set
+  pressureSensor.setFluidDensity(1025);           // -> 997 for freshwater, 1025 for seawater
+  Serial.println("Pressure sensor initialized!");
+
+  // Initialize radio transmitter
+  initialize_radio();
+
+  // Initialize LittleFS
+  if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+    Serial.println("LittleFS Mount Failed");
+    while(1) {delay(1000); }
+  } else {
+    Serial.println("Little FS Mounted Successfully"); 
+  }
+  bool fileexists = LittleFS.exists(LOG_FILE); 
+  if (!fileexists) {
+    Serial.println("Log file doesn't exists, creating..."); 
+    writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPA)\r\n"); 
+  } else {
+    Serial.println("Log file already exists, appending"); 
+  }
+
+  // Initialize time via manual setting
+  set_time_manually(); 
+
+  Serial.println("All functions initialized correctly."); 
+  Serial.println("Type 'start' to start competition mission."); 
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                                        Setting Time
+
+void set_time_manually() {
+  Serial.println("\nEnter current date and time before deployment:");
+
+  Serial.print("Year (e.g. 2025): ");
+  while (!Serial.available()){ 
+    delay(50); 
+  }
+  int year = Serial.readStringUntil('\n').toInt();
+
+  Serial.print(" Month (1-12): ");
+  while (!Serial.available()){ 
+    delay(50);
+  }
+  int month = Serial.readStringUntil('\n').toInt();
+
+  Serial.print(" Day: ");
+  while (!Serial.available()){ 
+    delay(50); 
+  }
+  int day = Serial.readStringUntil('\n').toInt();
+
+  Serial.print(" Hour (0-23): ");
+  while (!Serial.available()){ 
+    delay(50); 
+  }
+  g_hour = Serial.readStringUntil('\n').toInt();
+
+  Serial.print(" Minute: ");
+  while (!Serial.available()){ 
+    delay(50); 
+  }
+  g_minute = Serial.readStringUntil('\n').toInt();
+
+  Serial.print(" Second: ");
+  while (!Serial.available()){ 
+    delay(50); 
+  }
+  g_second = Serial.readStringUntil('\n').toInt();
+
+  // Note: year = year - 1900 and month = month - 1 because of how struct tm works in C/C++
+  struct tm timeinfo;
+  timeinfo.tm_year  = year - 1900;
+  timeinfo.tm_mon   = month - 1; 
+  timeinfo.tm_mday  = day;
+  timeinfo.tm_hour  = g_hour;
+  timeinfo.tm_min   = g_minute;
+  timeinfo.tm_sec   = g_second;
+  timeinfo.tm_isdst = 0;
+
+  time_t t = mktime(&timeinfo);
+  struct timeval now = { .tv_sec = t };
+  settimeofday(&now, NULL);
+
+  Serial.println("Time set successfully!");
+  
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                                        LittleFS Write/Append File
+
+void writeFile(fs::FS &fs, const char* path, const char* message) {
+  Serial.printf("Writing file: %s\r\n", path);
+  File file = fs.open(path, FILE_WRITE);
+  if (!file) {
+    Serial.println("- failed to open file for writing");
+    return;
+  }
+  if (file.print(message)) {
+    Serial.println("- file written");
+  } else {
+    Serial.println("- write failed");
+  }
+  file.close();
+}
+
+void appendFile(fs::FS &fs, const char* path, const char* message) {
+  Serial.printf("Appending to file: %s\r\n", path);
+  File file = fs.open(path, FILE_APPEND);
+  if (!file) {
+    Serial.println("- failed to open file for appending");
+    return;
+  }
+  if (file.print(message)) {
+    Serial.println("- message appended");
+  } else {
+    Serial.println("- append failed");
+  }
+  file.close();
+}
+
+
+
+
 
