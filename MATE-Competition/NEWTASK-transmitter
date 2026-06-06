@@ -27,10 +27,10 @@ const int PIN_RF95_SCK = D8;    // RFM95 Clock
 const int PIN_RF95_MISO = D9;   // RFM95 Serial Out 
 const int PIN_RF95_MOSI = D10;  // RFM95 Serial In 
 
-//MCP23017 pin assignments
+// MCP23017 pin assignments
 const int MCP_ADDR = 0x20;  // I2C Address
-const int PIN_MOTOR_1 = 13; //GPB4
-const int PIN_MOTOR_2 = 12; //GPB5
+const int PIN_MOTOR_1 = 13; // GPB4
+const int PIN_MOTOR_2 = 12; // GPB5
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                 Global Variables
@@ -66,32 +66,32 @@ bool mission_complete = false;
 bool radio_available = false; 
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                               Functions (for explanation please ask Abirami Subramanian)
-
-// Hardware initialization
-void initialize_mcp(); 
+//                                                                     Functions 
+// Implemented in the same order as below:
+// (1) Hardware initialization:
+void initialize_mcp();
 void initialize_radio(); 
 
-// Setting time 
-int g_hour;
+// (2) Setting time: 
+int g_hour; 
 int g_minute;
 int g_second;
 void set_time_manually(); 
 
-// Communication
+// (3) Communication:
 void radiotransmit_data(); 
-void wifitransmit_data();
-void radio_send(const String &message);
+void wifitransmit_data(); 
+void radio_send(const String &message); 
 String radio_receive(unsigned long timeout_ms);
 
-// Sensor data collection
+// (4) Sensor data collection:
 void read_sensor_isr(float &depth, float &pressure); // Collects data at 5 second intervals (review implementation + debug)
 void save_data(float depth, float pressure); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
 void data_prompt() // Parameters and implementation needed
 
-// Piston movement 
+// (5) Piston movement: 
 void piston_out();
 void piston_in();
 void IRAM_ATTR encoder_isr(); 
@@ -182,7 +182,7 @@ void setup() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                                     Initialize MCP23017 Expander
+//                                                                    (1a) Initialize MCP23017 Expander
 
 void initialize_mcp() {
   if (!mcp.begin_I2C(MCP_ADDR)) {
@@ -197,7 +197,7 @@ void initialize_mcp() {
   Serial.println("MCP23017 succesfully initialized!"); 
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                               Initialize RFM9x LoRa Radio Transmitter
+//                                                               (1b) Initialize RFM9x LoRa Radio Transmitter
 
 void initialize_radio() {
   digitalWrite(PIN_RF95_RST, HIGH);
@@ -209,11 +209,11 @@ void initialize_radio() {
   delay(10);
 
   if (!rf95.init()) {
-    Serial.println("NanoFloat radio init failed");
+    Serial.println("RFM9x LoRa Radio Transmitter initialization failed");
     radio_available = false;
     return;
   }
-  Serial.println("NanoFloat radio init OK!");
+  Serial.println("RFM9x LoRa Radio Transmitter initialization OK!");
 
   if(!rf95.setFrequency(RF95_FREQ)) {
     Serial.println("setFrequency failed");
@@ -221,12 +221,12 @@ void initialize_radio() {
     return;
   }
 
-  Serial.print("Set Freq to: ");
+  Serial.print("Set frequency to: ");
   Serial.println(RF95_FREQ);
 
   rf95.setTxPower(23, false);
   radio_available = true;
-  Serial.println("NanoFloat radio initialized!");
+  Serial.println("RFM9x LoRa Radio Transmitter initialized!");
 }
 
 void radio_send(const String &message) {
@@ -252,7 +252,7 @@ String radio_receive(unsigned long timeout_ms) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                                        Setting Time
+//                                                                        (2) Setting Time
 
 void set_time_manually() {
   Serial.println("\nEnter current date and time before deployment:");
