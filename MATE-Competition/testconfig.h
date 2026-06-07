@@ -2,7 +2,7 @@
 #define TESTCONFIG_H
 
 const long ENCODER_MIN_COUNT = 0;
-const long ENCODER_MAX_COUNT = 200000;
+const long ENCODER_MAX_COUNT = 195000;
 
 const float MIN_DEPTH_M = 0.0;
 const float MAX_DEPTH_M = 4.0;
