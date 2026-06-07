@@ -519,7 +519,62 @@ void radiotransmit_data() {
 
   file.close();
   Serial.println("NanoFloat radio transmission complete");
+
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                          Transmit from LittleFS via RFM9x Radio
+
+void radiotransmit_data() {
+  static unsigned long lastTX = 0;
+  if (millis() - lastTX < TX_INTERVAL) return;
+  lastTX = millis();
+
+  if (!radio_available) {
+    Serial.println("NanoFloat radio not available");
+    return;
+  }
+
+  // Open log file from flash 
+  File file = LittleFS.open(LOG_FILE);
+  if (!file || file.isDirectory()) {
+    Serial.println("Failed to open log file");
+    return;
+  }
+
+  Serial.println("NanoFloat transmitting log over radio...");
+  static unsigned int packetnum = 0;
+
+  // Skip the header line
+  if (file.available()) {
+    file.readStringUntil('\n');
+  }
+
+  // Transmit each data line as a separate packet
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    // Append a sequence number so the receiver can detect gaps
+    String radioPacket = line + " | #" + String(packetnum++);
+
+    char packetBuf[120];
+    radioPacket.toCharArray(packetBuf, sizeof(packetBuf));
+
+    Serial.print("Sending packet: ");
+    Serial.println(packetBuf);
+
+    delay(10);
+    rf95.send((uint8_t *)packetBuf, strlen(packetBuf));
+    rf95.waitPacketSent();
+    delay(50); // brief gap between packets to avoid collisions
+  }
+
+  file.close();
+  Serial.println("NanoFloat radio transmission complete");
+}
+
 
 
 // //================================================================================================================================================
