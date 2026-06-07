@@ -79,17 +79,15 @@ int g_second;
 void set_time_manually(); 
 
 // (3) Communication:
-void radiotransmit_data(); 
-void wifitransmit_data(); 
 void radio_send(const String &message); 
 String radio_receive(unsigned long timeout_ms);
 
 // (4) Sensor data collection:
-void read_sensor_isr(float &depth, float &pressure); // Collects data at 5 second intervals (review implementation + debug)
-void save_data(float depth, float pressure); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-void data_prompt() // Parameters and implementation needed
+void read_sensor_isr(float &depth, float &pressure); // Collects data at 5 second intervals (review implementation + debug)
+void save_data(float depth, float pressure); 
+void radiotransmit_data(); // Parameters and implementation needed
 
 // (5) Piston movement: 
 void piston_out();
@@ -101,7 +99,8 @@ bool PID_depth(); // Parameters and implementation needed
 bool hold_depth(); // Parameters and implementation needed
 void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
 
-/* Additional for future use; based on encoder counts
+/* Additional for future use
+void wifitransmit_data();
 long depth_to_encoder(float depth_m);
 void move_to_depth(float target_depth_m); */
 
@@ -182,7 +181,7 @@ void setup() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                                    (1a) Initialize MCP23017 Expander
+//                                                                    (1) Initialize MCP23017 Expander
 
 void initialize_mcp() {
   if (!mcp.begin_I2C(MCP_ADDR)) {
@@ -195,61 +194,6 @@ void initialize_mcp() {
   mcp.pinMode(PIN_MOTOR_1, OUTPUT); 
   mcp.pinMode(PIN_MOTOR_2, OUTPUT); 
   Serial.println("MCP23017 succesfully initialized!"); 
-
-//-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                               (1b) Initialize RFM9x LoRa Radio Transmitter
-
-void initialize_radio() {
-  digitalWrite(PIN_RF95_RST, HIGH);
-  Serial.println("\nInitializing RFM9x LoRa Radio Transmitter...");
-
-  digitalWrite(PIN_RF95_RST, LOW);
-  delay(10);
-  digitalWrite(PIN_RF95_RST, HIGH);
-  delay(10);
-
-  if (!rf95.init()) {
-    Serial.println("RFM9x LoRa Radio Transmitter initialization failed");
-    radio_available = false;
-    return;
-  }
-  Serial.println("RFM9x LoRa Radio Transmitter initialization OK!");
-
-  if(!rf95.setFrequency(RF95_FREQ)) {
-    Serial.println("setFrequency failed");
-    radio_available = false;
-    return;
-  }
-
-  Serial.print("Set frequency to: ");
-  Serial.println(RF95_FREQ);
-
-  rf95.setTxPower(23, false);
-  radio_available = true;
-  Serial.println("RFM9x LoRa Radio Transmitter initialized!");
-}
-
-void radio_send(const String &message) {
-  if (!radio_available) return;
-  char buf[120];
-  message.toCharArray(buf, sizeof(buf));
-  rf95.send((uint8_t *)buf, strlen(buf) + 1);
-  rf95.waitPacketSent();
-}
-
-String radio_receive(unsigned long timeout_ms) {
-  unsigned long start = millis();
-  while (millis() - start < timeout_ms) {
-    if (rf95.available()) {
-      uint8_t buf[120];
-      uint8_t len = sizeof(buf);
-      if (rf95.recv(buf, &len)) {
-        return String((char *)buf);
-      }
-    }
-  }
-  return "";
-}
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                        (2) Setting Time
@@ -308,11 +252,65 @@ void set_time_manually() {
   settimeofday(&now, NULL);
 
   Serial.println("Time set successfully!");
-  
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                                        LittleFS Write/Append File
+//                                         (3) Initialize RFM9x LoRa Radio Transmitter + Radio Send/Radio Recieve function
+
+void initialize_radio() {
+  digitalWrite(PIN_RF95_RST, HIGH);
+  Serial.println("\nInitializing RFM9x LoRa Radio Transmitter...");
+
+  digitalWrite(PIN_RF95_RST, LOW);
+  delay(10);
+  digitalWrite(PIN_RF95_RST, HIGH);
+  delay(10);
+
+  if (!rf95.init()) {
+    Serial.println("RFM9x LoRa Radio Transmitter initialization failed");
+    radio_available = false;
+    return;
+  }
+  Serial.println("RFM9x LoRa Radio Transmitter initialization OK!");
+
+  if(!rf95.setFrequency(RF95_FREQ)) {
+    Serial.println("setFrequency failed");
+    radio_available = false;
+    return;
+  }
+
+  Serial.print("Set frequency to: ");
+  Serial.println(RF95_FREQ);
+
+  rf95.setTxPower(23, false);
+  radio_available = true;
+  Serial.println("RFM9x LoRa Radio Transmitter initialized!");
+}
+
+void radio_send(const String &message) {
+  if (!radio_available) return;
+  char buf[120];
+  message.toCharArray(buf, sizeof(buf));
+  rf95.send((uint8_t *)buf, strlen(buf) + 1);
+  rf95.waitPacketSent();
+}
+
+String radio_receive(unsigned long timeout_ms) {
+  unsigned long start = millis();
+  while (millis() - start < timeout_ms) {
+    if (rf95.available()) {
+      uint8_t buf[120];
+      uint8_t len = sizeof(buf);
+      if (rf95.recv(buf, &len)) {
+        return String((char *)buf);
+      }
+    }
+  }
+  return "";
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                             (4a&b) LittleFS Write/Append File
 
 void writeFile(fs::FS &fs, const char* path, const char* message) {
   Serial.printf("Writing file: %s\r\n", path);
@@ -343,6 +341,93 @@ void appendFile(fs::FS &fs, const char* path, const char* message) {
   }
   file.close();
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                               (4c&d) Read Data From Bar-30 MS5837 Sensor/Save Data To LittleFS
+
+void read_sensor_isr(float &depth, float &pressure) {
+  pressureSensor.read(); 
+  depth = pressureSensor.depth(); 
+  pressure = pressureSensor.pressure() * 0.1; // mbar to kPA
+
+  if (depth < 0) {
+    depth = 0; 
+  }
+
+  if (depth > MAX_DEPTH) {
+    depth = MAX_DEPTH; 
+  }
+}
+
+void save_data(float depth, float pressure) {
+  struct tm timeinfo; 
+  String timestamp; 
+
+  if (getLocalTime(&timeinfo)) {
+    char buf[30]; 
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo); 
+    timestamp = String(buf); 
+  } else {
+    timestamp = String(millis()); 
+  }
+
+  String line = COMPANY_NUMBER + ", " + timestamp + ", " + String(depth, 2) + ", " + String(pressure, 2) + "\r\n"; 
+  appendFile(LittleFS, LOG_FILE, line.c_str());  
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                        (4e) Transmit from LittleFS via RFM9x Radio
+
+void radiotransmit_data() {
+  static unsigned long lastTX = 0;
+  if (millis() - lastTX < TX_INTERVAL) return;
+  lastTX = millis();
+
+  if (!radio_available) {
+    Serial.println("NanoFloat radio not available");
+    return;
+  }
+
+  // Open log file from flash 
+  File file = LittleFS.open(LOG_FILE);
+  if (!file || file.isDirectory()) {
+    Serial.println("Failed to open log file");
+    return;
+  }
+
+  Serial.println("NanoFloat transmitting log over radio...");
+  static unsigned int packetnum = 0;
+
+  // Skip the header line
+  if (file.available()) {
+    file.readStringUntil('\n');
+  }
+
+  // Transmit each data line as a separate packet
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    // Append a sequence number so the receiver can detect gaps
+    String radioPacket = line + " | #" + String(packetnum++);
+
+    char packetBuf[120];
+    radioPacket.toCharArray(packetBuf, sizeof(packetBuf));
+
+    Serial.print("Sending packet: ");
+    Serial.println(packetBuf);
+
+    delay(10);
+    rf95.send((uint8_t *)packetBuf, strlen(packetBuf));
+    rf95.waitPacketSent();
+    delay(50); // brief gap between packets to avoid collisions
+  }
+
+  file.close();
+  Serial.println("NanoFloat radio transmission complete");
+}
+
 
 
 
