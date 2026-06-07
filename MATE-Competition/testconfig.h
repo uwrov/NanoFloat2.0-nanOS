@@ -1,27 +1,12 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef TESTCONFIG_H
+#define TESTCONFIG_H
 
-// ------------------------------------------------------------
-// WiFi:
-// ------------------------------------------------------------
+const long ENCODER_MIN_COUNT = 0;
+const long ENCODER_MAX_COUNT = 200000;
 
-const char* WIFI_SSID = "NanoFloat2.0";
-const char* WIFI_PASSWORD = "fernano";
+const float MIN_DEPTH_M = 0.0;
+const float MAX_DEPTH_M = 4.0;
 
-
-// ------------------------------------------------------------
-// Encoder Test:
-// ------------------------------------------------------------
-
-// Tolerance:
-// (Allowed mission tolerance is +/-33cm)
-#define ENCODER_TOLERANCE  0.20f 
-
-// Calibration targets (please replace with actual counts after test is run):                                         
-#define ENCODER_COUNT_0_4M  1000000     
-#define ENCODER_COUNT_2_5M  6250000
-
-// The magnitude of each encoder step
-#define ENCODER_CORRECTION_STEP 100000
+const unsigned long MAX_MOTOR_TIME_MS = 240000; // In milliseconds - 4 minutes
 
 #endif
