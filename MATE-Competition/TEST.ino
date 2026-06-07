@@ -11,7 +11,7 @@
 #include <Adafruit_MCP23X17.h>
 #include <MS5837.h>
 #include "time.h"
-#include "config.h"
+#include "testconfig.h"
 
 //================================================================================================================================================
 //                                                              Pin Definitions (XIAO ESP32-C6 & MCP23017)
@@ -37,8 +37,9 @@ const int PIN_MOTOR_2 = 12; //GPB5
 
 const String COMPANY_NUMBER = "0416A"; 
 
-volatile int encoder_delta = 0; 
-int piston_position = 0;
+volatile long encoder_delta = 0; 
+int encoder_counts = 0;
+float normalized_position = 0.0;
 
 // Depth control parameters
 float current_depth = 0.0;
@@ -48,7 +49,6 @@ const float MAX_DEPTH = 30.0;
 const float MIN_DEPTH = 0.0;
 
 const unsigned long MAX_MOTOR_TIME = 120000;
-
 
 // Competition status
 bool mission_complete = false;
@@ -83,24 +83,23 @@ void piston_out();
 void piston_in();
 void piston_stop();
 void piston_move(int encoder_steps);
+float encoder_position_scale();
 void IRAM_ATTR encoder_isr(); 
 void set_time_manually(); 
+void piston_move_to(long target_counts) {
 void position_reset(); 
 void read_sensor(float &depth, float &pressure); 
 void save_data(float depth, float pressure); 
 void radiotransmit_data(); 
 void wifitransmit_data();
-bool move_to_depth(float target_depth_m); 
-bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings); 
-bool surface(); 
 bool vertical_profile(int profile_num); 
-void competition_mission(); 
 void initialize_radio(); 
 void radio_send(const String &message);
 String radio_receive(unsigned long timeout_ms);
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
+void data_logging();
 int g_hour;
 int g_minute;
 int g_second;
@@ -161,7 +160,7 @@ void setup() {
   // Initialize Serial
   Serial.begin(9600);
   delay(1000);
-  Serial.println("|| NanoFloat Competition Mode - Task 4.1 ||");
+  Serial.println("Setup functions");
 
   // Configure direct GPIO pins
   pinMode(PIN_ENCODER_A,   INPUT_PULLUP);
@@ -180,26 +179,26 @@ void setup() {
   // Initialize motor to stopped
   piston_stop();
 
-  Serial.println("Direction test - extending for 1 second...");
-  piston_out();
+  // Ballasting test
+  Serial.println("Ballasting test - extending piston halfway...");
+  piston_move_to(100000);
   delay(1000);
+  
   piston_stop();
-  noInterrupts();
-  piston_position += encoder_delta;
-  encoder_delta = 0;
-  interrupts();
+  update_encoder()
   Serial.print("Encoder after extend: ");
-  Serial.println(piston_position);
-  piston_position = 0;
+  Serial.println(encoder_counts);
+  Serial.print("Normalized: ");
+  Serial.println(normalized_position);
 
   // EEPROM Set-Up
   EEPROM.begin(EEPROM_SIZE); 
-  EEPROM.get(EEPROM_POSITION_ADDR, piston_position); 
-  if (piston_position < 0) {
-    piston_position = 0;
+  EEPROM.get(EEPROM_POSITION_ADDR, encoder_counts); 
+  if (encoder_counts < 0) {
+    encoder_counts = 0;
   }
   Serial.print("Restored piston position: "); 
-  Serial.println(piston_position); 
+  Serial.println(encoder_counts); 
 
   // Initialize pressure sensor
   Serial.println("\nInitializing MS5837 pressure sensor...");
@@ -390,7 +389,7 @@ void piston_stop() {
 }
 
 void piston_move(int encoder_steps) {
-  int start = piston_position;
+  int start = encoder_counts;
   
   if (encoder_steps > 0) {
     piston_out();
@@ -398,11 +397,8 @@ void piston_move(int encoder_steps) {
     piston_in();
   }
 
-  while (abs(piston_position - start) < abs(encoder_steps)) {
-    noInterrupts();
-    piston_position += encoder_delta;
-    encoder_delta = 0;
-    interrupts();
+  while (abs(encoder_counts - start) < abs(encoder_steps)) {
+   update_encoder()
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
@@ -411,6 +407,34 @@ void piston_move(int encoder_steps) {
   }
 
   piston_stop();
+}
+
+void piston_move_to(long target_counts) {
+  if (encoder_counts < target_counts) {
+    piston_out();
+  } else {
+    piston_in();
+  }
+
+  while (encoder_counts != target_counts) {
+    update_encoder()
+  }
+
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      return;
+    }
+  }
+  piston_stop();
+}
+
+float encoder_position_scale(long counts) {
+    float position = (float)(counts) / (ENCODER_MAX_COUNT);
+
+    if (position < 0.0f) position = 0.0f;
+    if (position > 1.0f) position = 1.0f;
+
+    return position;
 }
 
 // //================================================================================================================================================
@@ -422,6 +446,15 @@ void IRAM_ATTR encoder_isr() {
     encoder_delta--; 
   }
 }
+
+void update_encoder() {
+  noInterrupts();
+  encoder_counts += encoder_delta;
+  encoder_delta = 0;
+  interrupts();
+
+  normalized_position = encoder_position_scale(encoder_counts);
+}
 // //================================================================================================================================================
 // //                                                              Save / Reset Position
 void position_reset() {
@@ -430,8 +463,9 @@ void position_reset() {
   while (digitalRead(PIN_LIMIT_SW) == LOW);
 
   piston_stop();
-  piston_position = 0;
+  encoder_counts = 0;
   encoder_delta = 0; 
+  normalized_position = encoder_position_scale(encoder_counts);
 }
 
 // //================================================================================================================================================
@@ -468,13 +502,10 @@ void save_data(float depth, float pressure) {
   appendFile(LittleFS, LOG_FILE, line.c_str());  
 }
 
-//-----------------------------------------------------------------------------------------------------------------------------------------------
+// //================================================================================================================================================
 //                                                          Transmit from LittleFS via RFM9x Radio
 
 void radiotransmit_data() {
-  static unsigned long lastTX = 0;
-  if (millis() - lastTX < TX_INTERVAL) return;
-  lastTX = millis();
 
   if (!radio_available) {
     Serial.println("NanoFloat radio not available");
@@ -522,23 +553,49 @@ void radiotransmit_data() {
 }
 
 
+// //================================================================================================================================================
+// //   Data Logging
+
+void data_logging() { 
+  static unsigned long lastLog = 0;
+
+    
+      // Save depth/pressure every 5 seconds
+      if (millis() - lastLog >= 5000)
+      {
+          float depth, pressure;
+          read_sensor(depth, pressure);
+          save_data(depth, pressure);
+  
+          Serial.print("Logged: ");
+          Serial.print(depth);
+          Serial.print(" m, ");
+          Serial.print(pressure);
+          Serial.println(" kPa");
+  
+          lastLog = millis();
+      }
+}
 
 // //================================================================================================================================================
-// //                                                              Piston Cycle Test (for debugging)
+// //                                                                        Piston Cycle Test
 void piston_cycle_test() {
-  
-  radio_send("Starting piston cycle test...");
-  radio_send("Retracting to full retraction...");
 
-  // Extend to full extension using encoder count
-  int target_extend = ENCODER_COUNT_2_5M;
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  save_data(depth, pressure);
+
+  radio_send("Starting piston cycle test...");
+  radio_send("Retracting to minimum position...");
+
   piston_in();
 
-  while (piston_position > target_extend) {
-    noInterrupts();
-    piston_position += encoder_delta;
-    encoder_delta = 0;
-    interrupts();
+  while (encoder_counts > ENCODER_MIN_COUNT) {
+    update_encoder()
+    data_logging();
+
+    // Stop if we hit or pass target
+    if (encoder_counts <= ENCODER_MIN_COUNT) break;
 
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
@@ -548,39 +605,68 @@ void piston_cycle_test() {
   }
 
   piston_stop();
-  radio_send("Full retraction reached. Encoder count: " + String(piston_position));
-  delay(2000);
 
-  // Extend to full 
+  radio_send("Full retraction reached: " + String(encoder_counts));
+  delay(1000);
+  
   radio_send("Extending to full extension...");
   piston_out();
 
-  while (piston_position < 0) {
-    noInterrupts();
-    piston_position += encoder_delta;
-    encoder_delta = 0;
-    interrupts();
+  while (encoder_counts < ENCODER_MAX_COUNT) {
+    update_encoder()
+    data_logging();
+
+    // Stop if we hit or pass target
+    if (encoder_counts >= ENCODER_MAX_COUNT) break;
+
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      radio_send("Limit switch triggered during extension.");
+      return;
+    }
   }
 
   piston_stop();
-  radio_send("Cycle complete. Encoder count: " + String(piston_position));
+
+  radio_send("Cycle complete. Encoder count: " + String(encoder_counts));
 }
 
 // //================================================================================================================================================
 // //                                                              Main Loop
 
 void loop() {
-    static bool test_started = false;
-    
-    if (!test_started) {
-      String cmd = radio_receive(100);
-      if (cmd == "start") {
-          test_started = true;
-          piston_cycle_test();
-      }
-    }
+  static bool test_started = false;
+  String cmd = radio_receive(100);
 
-  if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+  if (cmd == "extend") {
+    Serial.println("Command: extend to 200000");
+    piston_move_to(ENCODER_MAX_COUNT);
+
+    Serial.print("Reached: ");
+    Serial.println(encoder_counts);
+    update_encoder()
+  }
+
+  if (cmd == "sendlog") {
+    radio_send("Beginning log transmission...");
+    radiotransmit_data();
+  }
+
+  if (cmd == "stop") {
     piston_stop();
+    radio_send("Emergency stop triggered.");
+    test_started = false;
+  }
+    
+  if (!test_started) {
+    if (cmd == "start") {
+      test_started = true;
+      piston_cycle_test();
+      radio_send("Cycle complete. Log saved to LittleFS.");
+      test_started = false;
+   }
+  
+  if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
   }
 }
