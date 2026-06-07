@@ -86,7 +86,7 @@ void piston_move(int encoder_steps);
 float encoder_position_scale();
 void IRAM_ATTR encoder_isr(); 
 void set_time_manually(); 
-void piston_move_to(long target_counts) {
+void piston_move_to(long target_counts);
 void position_reset(); 
 void read_sensor(float &depth, float &pressure); 
 void save_data(float depth, float pressure); 
