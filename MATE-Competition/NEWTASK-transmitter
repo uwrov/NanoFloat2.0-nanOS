@@ -92,9 +92,10 @@ void radiotransmit_data(); // Parameters and implementation needed
 // (5) Piston movement: 
 void piston_out();
 void piston_in();
+void piston_stop();
 void IRAM_ATTR encoder_isr(); 
-float encoder_position_scale(long counts); // Implementation needed 
 void position_reset(); 
+float encoder_position_scale(long counts); // Implementation needed 
 bool PID_depth(); // Parameters and implementation needed
 bool hold_depth(); // Parameters and implementation needed
 void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
@@ -181,7 +182,7 @@ void setup() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                                    (1) Initialize MCP23017 Expander
+//                                                                  (1) Initialize MCP23017 Expander
 
 void initialize_mcp() {
   if (!mcp.begin_I2C(MCP_ADDR)) {
@@ -343,7 +344,7 @@ void appendFile(fs::FS &fs, const char* path, const char* message) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                               (4c&d) Read Data From Bar-30 MS5837 Sensor/Save Data To LittleFS
+//                                               (4c&d) Read Bar-30 MS5837 Sensor ISR/Save Data To LittleFS
 
 void read_sensor_isr(float &depth, float &pressure) {
   pressureSensor.read(); 
@@ -428,8 +429,80 @@ void radiotransmit_data() {
   Serial.println("NanoFloat radio transmission complete");
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                      (5a&b&c) Piston out, Piston In, Piston Stop
 
+void piston_out() {
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+}
 
+void piston_in() {
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+  
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
+}
 
+void piston_stop() {
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                              (5d) Encoder ISR
+
+void IRAM_ATTR encoder_isr() {
+  if (digitalRead(PIN_ENCODER_A) > digitalRead(PIN_ENCODER_B)) {
+    encoder_delta++; 
+  } else {
+    encoder_delta--; 
+  }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                             (5e) Position Reset 
+
+void position_reset() {
+  piston_in();
+
+  while (digitalRead(PIN_LIMIT_SW) == LOW);
+
+  piston_stop();
+  piston_position = 0;
+  encoder_delta = 0; 
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                        (5f) Scaling Encoder Counts
+
+float encoder_position_scale(long counts) {
+  
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                           (5g) PID Control
+
+bool PID_depth() {
+
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                          (5h) Holding Depth
+
+bool hold_depth() {
+
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                        (5i) Competition Mission 
+
+// PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
+void competition_mission() {
+
+}
 
