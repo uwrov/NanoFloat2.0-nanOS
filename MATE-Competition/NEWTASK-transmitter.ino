@@ -97,6 +97,7 @@ void piston_in();
 void piston_stop();
 void IRAM_ATTR encoder_isr(); 
 void piston_reset(); 
+void piston_homing();
 float encoder_normalization(long counts); // Implementation needed 
 void update_encoder();
 bool PID_depth(); // Parameters and implementation needed
