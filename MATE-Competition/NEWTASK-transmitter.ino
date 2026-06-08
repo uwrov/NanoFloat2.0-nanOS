@@ -38,8 +38,9 @@ const int PIN_MOTOR_2 = 12; // GPB5
 const String COMPANY_NUMBER = "0416A"; 
 
 // Depth control parameters
-volatile int encoder_delta = 0; 
-int piston_position = 0;
+volatile long encoder_delta = 0; 
+int encoder_counts = 0;
+float normalized_position = 0.0;
 float current_depth_m = 0.0;
 float target_depth_m = 0.0;
 
@@ -81,29 +82,32 @@ void set_time_manually();
 // (3) Communication:
 void radio_send(const String &message); 
 String radio_receive(unsigned long timeout_ms);
+void radiotransmit_data(); 
 
 // (4) Sensor data collection:
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-void read_sensor_isr(float &depth, float &pressure); // Collects data at 5 second intervals (review implementation + debug)
+void read_sensor(float &depth, float &pressure); // Collects data at 5 second intervals (review implementation + debug)
 void save_data(float depth, float pressure); 
-void radiotransmit_data(); // Parameters and implementation needed
+void data_logging();
 
 // (5) Piston movement: 
 void piston_out();
 void piston_in();
 void piston_stop();
 void IRAM_ATTR encoder_isr(); 
-void position_reset(); 
-float encoder_position_scale(long counts); // Implementation needed 
+void piston_reset(); 
+float encoder_normalization(long counts); // Implementation needed 
+void update_encoder();
 bool PID_depth(); // Parameters and implementation needed
 bool hold_depth(); // Parameters and implementation needed
 void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
 
+// (6) Buoyancy/ballasting:
+void piston_move_to(float target_depth_m);
+
 /* Additional for future use
-void wifitransmit_data();
-long depth_to_encoder(float depth_m);
-void move_to_depth(float target_depth_m); */
+void wifitransmit_data(); */
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                          Setup
@@ -256,7 +260,7 @@ void set_time_manually() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                         (3) Initialize RFM9x LoRa Radio Transmitter + Radio Send/Radio Recieve function
+//                                                 (3a) Initialize RFM9x LoRa Radio Transmitter
 
 void initialize_radio() {
   digitalWrite(PIN_RF95_RST, HIGH);
@@ -288,6 +292,8 @@ void initialize_radio() {
   Serial.println("RFM9x LoRa Radio Transmitter initialized!");
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+                                                           (3b&c) Radio Send/Radio Receive
 void radio_send(const String &message) {
   if (!radio_available) return;
   char buf[120];
@@ -309,6 +315,11 @@ String radio_receive(unsigned long timeout_ms) {
   }
   return "";
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+                                                          (3d) Transmit from LittleFS via RFM9x Radio
+
+
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                             (4a&b) LittleFS Write/Append File
@@ -377,58 +388,24 @@ void save_data(float depth, float pressure) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (4e) Transmit from LittleFS via RFM9x Radio
+//                                                            (4e) Timed Data Logging
 
-void radiotransmit_data() {
-  static unsigned long lastTX = 0;
-  if (millis() - lastTX < TX_INTERVAL) return;
-  lastTX = millis();
-
-  if (!radio_available) {
-    Serial.println("NanoFloat radio not available");
-    return;
-  }
-
-  // Open log file from flash 
-  File file = LittleFS.open(LOG_FILE);
-  if (!file || file.isDirectory()) {
-    Serial.println("Failed to open log file");
-    return;
-  }
-
-  Serial.println("NanoFloat transmitting log over radio...");
-  static unsigned int packetnum = 0;
-
-  // Skip the header line
-  if (file.available()) {
-    file.readStringUntil('\n');
-  }
-
-  // Transmit each data line as a separate packet
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.length() == 0) continue;
-
-    // Append a sequence number so the receiver can detect gaps
-    String radioPacket = line + " | #" + String(packetnum++);
-
-    char packetBuf[120];
-    radioPacket.toCharArray(packetBuf, sizeof(packetBuf));
-
-    Serial.print("Sending packet: ");
-    Serial.println(packetBuf);
-
-    delay(10);
-    rf95.send((uint8_t *)packetBuf, strlen(packetBuf));
-    rf95.waitPacketSent();
-    delay(50); // brief gap between packets to avoid collisions
-  }
-
-  file.close();
-  Serial.println("NanoFloat radio transmission complete");
+void data_logging() { 
+  static unsigned long lastLog = 0;
+  // Save depth/pressure every 5 seconds
+    if (millis() - lastLog >= 5000) {
+      float depth, pressure;
+      read_sensor(depth, pressure);
+      save_data(depth, pressure);
+    
+      Serial.print("Logged: ");
+      Serial.print(depth);
+      Serial.print(" m, ");
+      Serial.print(pressure);
+      Serial.println(" kPa");
+      lastLog = millis();      
+    }
 }
-
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                      (5a&b&c) Piston out, Piston In, Piston Stop
 
@@ -467,7 +444,7 @@ void IRAM_ATTR encoder_isr() {
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                             (5e) Position Reset 
 
-void position_reset() {
+void piston_reset() {
   piston_in();
 
   while (digitalRead(PIN_LIMIT_SW) == LOW);
@@ -478,31 +455,70 @@ void position_reset() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (5f) Scaling Encoder Counts
+//                                                        (5f) Normalizing Encoder Counts
 
-float encoder_position_scale(long counts) {
-  
+float encoder_normalization(long counts) {
+    float position = (float) (counts) / (ENCODER_MAX_COUNT);
+
+    if (position < 0.0f) position = 0.0f;
+    if (position > 1.0f) position = 1.0f;
+
+    return position;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                           (5g) PID Control
+//                                                      (5g) Updating Encoder Count
 
+void updating_encoder() {
+  noInterrupts();
+  encoder_counts += encoder_delta;
+  encoder_delta = 0;
+  interrupts();
+
+  normalized_position = encoder_normalization(encoder_counts);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                           (5h) PID Control
 bool PID_depth() {
 
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                          (5h) Holding Depth
+//                                                          (5i) Holding Depth
 
 bool hold_depth() {
 
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (5i) Competition Mission 
+//                                                        (5j) Competition Mission 
 
 // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
 void competition_mission() {
 
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                           (6a&b) Buoyancy/Ballasting Calibration: Encoder Depth
+
+void piston_move_to(long target_counts) {
+  if (encoder_counts < target_counts) {
+    piston_out();
+  } else {
+    piston_in();
+  }
+
+  while (encoder_counts != target_counts) {
+    update_encoder();
+  }
+
+  if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+    piston_stop();
+    return;
+  }
+  piston_stop();
+}
+
+
 
