@@ -120,6 +120,7 @@ class DepthController {
       // if dist < depth_deadband
       if (dist < depth_deadband) {
           cmd = neutral;
+          velocity_integral = 0.0;
       } else if (moving_towards_target && dist < braking_distance) { // elif moving_towards_target and dist < braking_distance
           if (v > 0) {
             cmd = 1.0;
@@ -188,7 +189,6 @@ void piston_in();
 void piston_stop();
 void IRAM_ATTR encoder_isr(); 
 void piston_reset(); 
-void piston_home();
 float encoder_normalization(long counts); // Implementation needed 
 void update_encoder();
 bool PI_move(); // Parameters and implementation needed
@@ -229,8 +229,9 @@ void setup() {
   delay(10000);
 
   // Ballasting test
+  Serial.println("Resetting piston position...");
+  piston_reset();
   Serial.println("Ballasting test - extending piston halfway...");
-  piston_home();
   piston_move_to(97500);
   delay(1000);
   
@@ -364,7 +365,7 @@ void set_time_manually() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                 (3a) Initialize RFM9x LoRa Radio Transmitter
+//                                                     (3a) Initialize RFM9x LoRa Radio Transmitter
 
 void initialize_radio() {
   digitalWrite(PIN_RF95_RST, HIGH);
@@ -397,7 +398,7 @@ void initialize_radio() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-                                                           (3b&c) Radio Send/Radio Receive
+//                                                           (3b&c) Radio Send/Radio Receive
 void radio_send(const String &message) {
   if(!radio_available) return;
   char buf[120];
@@ -421,7 +422,7 @@ String radio_receive(unsigned long timeout_ms) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-                                                          (3d) Transmit from LittleFS via RFM9x Radio
+//                                                         (3d) Transmit from LittleFS via RFM9x Radio
 
 void radiotransmit_data() {
 
@@ -594,29 +595,26 @@ void IRAM_ATTR encoder_isr() {
 //                                                           (5e) Piston Reset 
 
 void piston_reset() {
-  
+
   piston_in();
 
-  while (digitalRead(PIN_LIMIT_SW) == LOW) {
-    piston_stop();
-    piston_position = 0;
-    encoder_delta = 0; 
+  while (digitalRead(PIN_LIMIT_SW) == LOW) {  // Not pressed
+    update_encoder();
+    delay(1);
   }
 
-}
+  // If pressed:
+  piston_stop();
 
-//-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                          (5f) Piston Homing
+  encoder_counts = 0;
+  encoder_delta = 0;
+  normalized_position = 0.0f;
 
-void piston_home() {
-
-  piston_reset();
   piston_move_to(10);
-
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (5g) Normalizing Encoder Counts
+//                                                        (5f) Normalizing Encoder Counts
 
 float encoder_normalization(long counts) {
     
@@ -634,9 +632,9 @@ float encoder_normalization(long counts) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                      (5h) Updating Encoder Count
+//                                                      (5g) Update Encoder Count
 
-void updating_encoder() {
+void update_encoder() {
   noInterrupts();
   encoder_counts += encoder_delta;
   encoder_delta = 0;
@@ -646,12 +644,12 @@ void updating_encoder() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                           (5i) PI Move
+//                                                           (5h) PI Move
 bool PI_move() {
   
   float depth, pressure;
   read_sensor(depth, pressure);
-  updating_encoder();
+  update_encoder();
 
   float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5f);
 
@@ -667,13 +665,13 @@ bool PI_move() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                          (5j) PI Hold 
+//                                                          (5i) PI Hold 
 
 bool PI_hold() {
 
   float depth, pressure;
   read_sensor(depth, pressure);
-  updating_encoder();
+  update_encoder();
 
   float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5f);
 
@@ -698,21 +696,23 @@ bool PI_hold() {
     hold_start_time = 0;
   }
 
+  return false;
+
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (5k) Competition Mission 
+//                                                        (5j) Competition Mission 
 
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
 
-  int depth = 0;
+  static int depth = 0;
   static bool holding = false;
 
   float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
 
   target_depth_m = profile_depths[depth];
-  bool at_depth = PI_depth;
+  bool at_depth = PI_move();
 
   if(at_depth && !holding) {
     holding = true;
@@ -724,8 +724,12 @@ void competition_mission() {
 
     if (hold_success) {
       holding = false;
-      depth++;
-      target_depth_m = profile_depths[depth];
+      if(depth < 3) {
+        depth++;
+      } else {
+        mission_complete = true;
+        piston_stop();
+      }
     }
   }
 }
@@ -790,5 +794,4 @@ void loop() {
       piston_stop();
   }
 }
-
 
