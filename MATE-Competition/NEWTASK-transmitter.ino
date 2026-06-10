@@ -66,6 +66,104 @@ const char* LOG_FILE = "/NanoFloat_datalog.csv";
 bool mission_complete = false;
 bool radio_available = false; 
 
+// Depth controller
+class DepthController {
+  private:
+      bool initialized = false;
+
+      double previous_time = 0.0;
+      double previous_depth = 0.0;
+      double velocity = 0.0;
+      double velocity_integral = 0.0;
+      double previous_cmd = 0.0;
+
+  public:
+
+    float update(double target_z, double current_z, double piston, double neutral) {
+          
+      float t = millis() / 1000.0;
+
+      if (!initialized) {
+          initialized = true;
+
+          previous_time = t;
+          previous_depth = current_z;
+          velocity = 0.0;
+          velocity_integral = 0.0;
+          previous_cmd = piston;
+      }
+
+      const double approach_distance = 1.0;
+      const double min_brake = 0.2;
+      const double decel = 0.025;
+
+      const double depth_deadband = 0.1;
+      const double kp_v = 1.0;
+      const double ki_v = 0.1;
+      const double kp_piston = 10.0;
+
+
+      double dt = t - previous_time;
+
+      // v = (current_z - state["z"]) / dt
+      double v = (current_z - previous_depth) / dt;
+
+      // v = 0.8*state["v"] + 0.2*v
+      v = 0.8 * velocity + 0.2 * v;
+
+      // braking_distance = max(v^2/(2*decel), min_brake)
+      double braking_distance = max((v * v) / (2.0 * decel), min_brake);
+
+      // error = target_z - current_z
+      double error = target_z - current_z;
+
+      double dist = abs(error);
+
+      // moving_towards_target = error * v > 0
+      bool moving_towards_target = (error * v > 0.0);
+
+      double cmd;
+      // if dist < depth_deadband
+      if (dist < depth_deadband) {
+          cmd = neutral;
+      } else if (moving_towards_target && dist < braking_distance) { // elif moving_towards_target and dist < braking_distance
+          if (v > 0) {
+            cmd = 1.0;
+          } else {            
+            cmd = 0.0;
+          }
+      } else if (dist > approach_distance) {  // elif dist > approach_distance
+          if (error > 0) {
+            cmd = 0.0;
+          } else {
+            cmd = 1.0;
+          }
+      } else {  // Velocity PI loop
+        double v_desired = 0.25 * error;
+
+        double ev = v_desired - v;
+
+        velocity_integral += ev * dt;
+
+        cmd = neutral - (kp_v * ev + ki_v * velocity_integral);
+      }
+
+      // motor = kp_piston*(cmd-piston)
+      double motor = kp_piston * (cmd - piston);
+
+      motor = constrain(motor, -1.0, 1.0);
+
+      // state.update(...)
+      previous_time = t;
+      previous_depth = current_z;
+      velocity = v;
+      previous_cmd = cmd;
+
+      return motor;
+    }
+};
+
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                     Functions 
 // Implemented in the same order as below:
@@ -103,6 +201,7 @@ void update_encoder();
 bool PID_depth(); // Parameters and implementation needed
 bool hold_depth(); // Parameters and implementation needed
 void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
+DepthController depthController;
 
 // (6) Buoyancy/ballasting:
 void piston_move_to(float target_depth_m);
@@ -358,7 +457,7 @@ void appendFile(fs::FS &fs, const char* path, const char* message) {
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                               (4c&d) Read Bar-30 MS5837 Sensor ISR/Save Data To LittleFS
 
-void read_sensor_isr(float &depth, float &pressure) {
+void read_sensor(float &depth, float &pressure) {
   pressureSensor.read(); 
   depth = pressureSensor.depth(); 
   pressure = pressureSensor.pressure() * 0.1; // mbar to kPA
@@ -443,7 +542,7 @@ void IRAM_ATTR encoder_isr() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                             (5e) Position Reset 
+//                                                           (5e) Piston Reset 
 
 void piston_reset() {
   piston_in();
@@ -456,7 +555,14 @@ void piston_reset() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (5f) Normalizing Encoder Counts
+//                                                          (5f) Piston Homing
+
+void piston_homing() {
+
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                        (5g) Normalizing Encoder Counts
 
 float encoder_normalization(long counts) {
     float position = (float) (counts) / (ENCODER_MAX_COUNT);
@@ -468,7 +574,7 @@ float encoder_normalization(long counts) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                      (5g) Updating Encoder Count
+//                                                      (5h) Updating Encoder Count
 
 void updating_encoder() {
   noInterrupts();
@@ -480,20 +586,20 @@ void updating_encoder() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                           (5h) PID Control
-bool PID_depth() {
+//                                                           (5i) PID Control
+float PD_depth(float target_z, float current_z, float piston, float t,
 
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                          (5i) Holding Depth
+//                                                          (5j) Holding Depth
 
 bool hold_depth() {
 
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                        (5j) Competition Mission 
+//                                                        (5k) Competition Mission 
 
 // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
 void competition_mission() {
