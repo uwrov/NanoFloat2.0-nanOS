@@ -49,7 +49,6 @@ unsigned long hold_start_time = 0;
 MS5837 pressureSensor;
 Adafruit_MCP23X17 mcp;
 RH_RF95 rf95(PIN_RF95_CS, PIN_RF95_G0);
-WiFiServer server(80);
 
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
