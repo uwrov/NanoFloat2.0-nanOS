@@ -43,6 +43,7 @@ int encoder_counts = 0;
 float normalized_position = 0.0;
 float current_depth_m = 0.0;
 float target_depth_m = 0.0;
+unsigned long hold_start_time = 0;
 
 // Hardware/Communication Objects
 MS5837 pressureSensor;
@@ -50,17 +51,12 @@ Adafruit_MCP23X17 mcp;
 RH_RF95 rf95(PIN_RF95_CS, PIN_RF95_G0);
 WiFiServer server(80);
 
-// EEPROM
-const int EEPROM_SIZE= 512; 
-const int EEPROM_POSITION_ADDR = 0; 
-
 // LittleFS log file 
 const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
 // Define commuication/data
 #define FORMAT_LITTLEFS_IF_FAILED true
 #define RF95_FREQ 915.0
-#define TX_INTERVAL 5000
 
 // Boolean flags
 bool mission_complete = false;
@@ -101,7 +97,6 @@ class DepthController {
       const double kp_v = 1.0;
       const double ki_v = 0.1;
       const double kp_piston = 10.0;
-
 
       double dt = t - previous_time;
 
@@ -163,7 +158,6 @@ class DepthController {
     }
 };
 
-
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                     Functions 
 // Implemented in the same order as below:
@@ -185,7 +179,7 @@ void radiotransmit_data();
 // (4) Sensor data collection:
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
-void read_sensor(float &depth, float &pressure); // Collects data at 5 second intervals (review implementation + debug)
+void read_sensor(float &depth, float &pressure); 
 void save_data(float depth, float pressure); 
 void data_logging();
 
@@ -195,16 +189,16 @@ void piston_in();
 void piston_stop();
 void IRAM_ATTR encoder_isr(); 
 void piston_reset(); 
-void piston_homing();
+void piston_home();
 float encoder_normalization(long counts); // Implementation needed 
 void update_encoder();
-bool PID_depth(); // Parameters and implementation needed
-bool hold_depth(); // Parameters and implementation needed
+bool PI_move(); // Parameters and implementation needed
+bool PI_hold(); // Parameters and implementation needed
 void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
 DepthController depthController;
 
 // (6) Buoyancy/ballasting:
-void piston_move_to(float target_depth_m);
+void piston_move_to(long target_counts);
 
 /* Additional for future use
 void wifitransmit_data(); */
@@ -233,28 +227,36 @@ void setup() {
 
   // Initialize motor to stopped
   piston_stop();
+  delay(10000);
 
-  // Initialize EEPROM (to store piston position if battery shuts off)
-  EEPROM.begin(EEPROM_SIZE); 
-  EEPROM.get(EEPROM_POSITION_ADDR, piston_position); 
-  if (piston_position < 0) {
-    piston_position = 0;
-  }
-  Serial.print("Restored piston position: "); 
-  Serial.println(piston_position); 
+  // Ballasting test
+  Serial.println("Ballasting test - extending piston halfway...");
+  piston_home();
+  piston_move_to(97500);
+  delay(1000);
+  
+  piston_stop();
+  update_encoder();
+  Serial.print("Encoder after extend: ");
+  Serial.println(encoder_counts);
+  Serial.print("Normalized: ");
+  Serial.println(normalized_position);
 
   // Initialize MS5837 Bar-30 sensor
   Serial.println("\n Initializing MS5837 pressure sensor...");
   int attempts = 0;
-  while (!pressureSensor.init() && attempts < 10) {
+  while(!pressureSensor.init() && attempts < 10) {
     Serial.println("Pressure sensor init failed! Retrying...");
     delay(2000);
     attempts++;
   } 
-  if (attempts >= 10) {
+  if(attempts >= 10) {
       Serial.println("ERROR: Could not initialize pressure sensor!");
-      while(1) { delay(1000); }
+      while(1) { 
+        delay(1000); 
+      }
   }
+
 
   pressureSensor.setModel(MS5837::MS5837_30BA);   // -> Bar30 model set
   pressureSensor.setFluidDensity(1025);           // -> 997 for freshwater, 1025 for seawater
@@ -266,7 +268,9 @@ void setup() {
   // Initialize LittleFS
   if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
     Serial.println("LittleFS Mount Failed");
-    while(1) {delay(1000); }
+    while(1) {
+      delay(1000); 
+    }
   } else {
     Serial.println("Little FS Mounted Successfully"); 
   }
@@ -289,7 +293,7 @@ void setup() {
 //                                                                  (1) Initialize MCP23017 Expander
 
 void initialize_mcp() {
-  if (!mcp.begin_I2C(MCP_ADDR)) {
+  if(!mcp.begin_I2C(MCP_ADDR)) {
     Serial.println("ERROR: MCP23017 not found."); 
     while(1) { 
       delay(1000); 
@@ -298,7 +302,8 @@ void initialize_mcp() {
 
   mcp.pinMode(PIN_MOTOR_1, OUTPUT); 
   mcp.pinMode(PIN_MOTOR_2, OUTPUT); 
-  Serial.println("MCP23017 succesfully initialized!"); 
+  Serial.println("MCP23017 succesfully initialized!");
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                        (2) Setting Time
@@ -307,37 +312,37 @@ void set_time_manually() {
   Serial.println("\nEnter current date and time before deployment:");
 
   Serial.print("Year (e.g. 2025): ");
-  while (!Serial.available()){ 
+  while(!Serial.available()) { 
     delay(50); 
   }
   int year = Serial.readStringUntil('\n').toInt();
 
   Serial.print(" Month (1-12): ");
-  while (!Serial.available()){ 
+  while(!Serial.available()) { 
     delay(50);
   }
   int month = Serial.readStringUntil('\n').toInt();
 
   Serial.print(" Day: ");
-  while (!Serial.available()){ 
+  while(!Serial.available()) { 
     delay(50); 
   }
   int day = Serial.readStringUntil('\n').toInt();
 
   Serial.print(" Hour (0-23): ");
-  while (!Serial.available()){ 
+  while(!Serial.available()){ 
     delay(50); 
   }
   g_hour = Serial.readStringUntil('\n').toInt();
 
   Serial.print(" Minute: ");
-  while (!Serial.available()){ 
+  while(!Serial.available()) { 
     delay(50); 
   }
   g_minute = Serial.readStringUntil('\n').toInt();
 
   Serial.print(" Second: ");
-  while (!Serial.available()){ 
+  while(!Serial.available()) { 
     delay(50); 
   }
   g_second = Serial.readStringUntil('\n').toInt();
@@ -395,7 +400,7 @@ void initialize_radio() {
 //-----------------------------------------------------------------------------------------------------------------------------------------------
                                                            (3b&c) Radio Send/Radio Receive
 void radio_send(const String &message) {
-  if (!radio_available) return;
+  if(!radio_available) return;
   char buf[120];
   message.toCharArray(buf, sizeof(buf));
   rf95.send((uint8_t *)buf, strlen(buf) + 1);
@@ -404,11 +409,11 @@ void radio_send(const String &message) {
 
 String radio_receive(unsigned long timeout_ms) {
   unsigned long start = millis();
-  while (millis() - start < timeout_ms) {
+  while(millis() - start < timeout_ms) {
     if (rf95.available()) {
       uint8_t buf[120];
       uint8_t len = sizeof(buf);
-      if (rf95.recv(buf, &len)) {
+      if(rf95.recv(buf, &len)) {
         return String((char *)buf);
       }
     }
@@ -419,7 +424,52 @@ String radio_receive(unsigned long timeout_ms) {
 //-----------------------------------------------------------------------------------------------------------------------------------------------
                                                           (3d) Transmit from LittleFS via RFM9x Radio
 
+void radiotransmit_data() {
 
+  if (!radio_available) {
+    Serial.println("NanoFloat radio not available");
+    return;
+  }
+
+  // Open log file from flash 
+  File file = LittleFS.open(LOG_FILE);
+  if (!file || file.isDirectory()) {
+    Serial.println("Failed to open log file");
+    return;
+  }
+
+  Serial.println("NanoFloat transmitting log over radio...");
+  static unsigned int packetnum = 0;
+
+  // Skip the header line
+  if(file.available()) {
+    file.readStringUntil('\n');
+  }
+
+  // Transmit each data line as a separate packet
+  while(file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    // Append a sequence number so the receiver can detect gaps
+    String radioPacket = line + " | #" + String(packetnum++);
+
+    char packetBuf[120];
+    radioPacket.toCharArray(packetBuf, sizeof(packetBuf));
+
+    Serial.print("Sending packet: ");
+    Serial.println(packetBuf);
+
+    delay(10);
+    rf95.send((uint8_t *)packetBuf, strlen(packetBuf));
+    rf95.waitPacketSent();
+    delay(50); // brief gap between packets to avoid collisions
+  }
+
+  file.close();
+  Serial.println("NanoFloat radio transmission complete");
+}                                                 
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                             (4a&b) LittleFS Write/Append File
@@ -427,11 +477,11 @@ String radio_receive(unsigned long timeout_ms) {
 void writeFile(fs::FS &fs, const char* path, const char* message) {
   Serial.printf("Writing file: %s\r\n", path);
   File file = fs.open(path, FILE_WRITE);
-  if (!file) {
+  if(!file) {
     Serial.println("- failed to open file for writing");
     return;
   }
-  if (file.print(message)) {
+  if(file.print(message)) {
     Serial.println("- file written");
   } else {
     Serial.println("- write failed");
@@ -462,11 +512,11 @@ void read_sensor(float &depth, float &pressure) {
   depth = pressureSensor.depth(); 
   pressure = pressureSensor.pressure() * 0.1; // mbar to kPA
 
-  if (depth < 0) {
+  if(depth < 0) {
     depth = 0; 
   }
 
-  if (depth > MAX_DEPTH) {
+  if(depth > MAX_DEPTH) {
     depth = MAX_DEPTH; 
   }
 }
@@ -475,7 +525,7 @@ void save_data(float depth, float pressure) {
   struct tm timeinfo; 
   String timestamp; 
 
-  if (getLocalTime(&timeinfo)) {
+  if(getLocalTime(&timeinfo)) {
     char buf[30]; 
     strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo); 
     timestamp = String(buf); 
@@ -545,19 +595,24 @@ void IRAM_ATTR encoder_isr() {
 //                                                           (5e) Piston Reset 
 
 void piston_reset() {
+  
   piston_in();
 
-  while (digitalRead(PIN_LIMIT_SW) == LOW);
+  while (digitalRead(PIN_LIMIT_SW) == LOW) {
+    piston_stop();
+    piston_position = 0;
+    encoder_delta = 0; 
+  }
 
-  piston_stop();
-  piston_position = 0;
-  encoder_delta = 0; 
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                          (5f) Piston Homing
 
-void piston_homing() {
+void piston_home() {
+
+  piston_reset();
+  piston_move_to(10);
 
 }
 
@@ -565,12 +620,18 @@ void piston_homing() {
 //                                                        (5g) Normalizing Encoder Counts
 
 float encoder_normalization(long counts) {
-    float position = (float) (counts) / (ENCODER_MAX_COUNT);
+    
+  float position = (float) (counts) / (ENCODER_MAX_COUNT);
 
-    if (position < 0.0f) position = 0.0f;
-    if (position > 1.0f) position = 1.0f;
+  if(position < 0.0) { 
+    position = 0.0f; 
+  }
+    
+  if(position > 1.0f) {
+    position = 1.0f;
+  } 
 
-    return position;
+  return position;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -586,28 +647,91 @@ void updating_encoder() {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                           (5i) PID Control
-float PD_depth(float target_z, float current_z, float piston, float t,
+//                                                           (5i) PI Move
+bool PI_move() {
+  
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  updating_encoder();
 
+  float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5f);
+
+  if(motor > 0.1f) {
+    piston_out();
+  } else if(motor < -0.1f) {
+    piston_in();
+  } else {
+    piston_stop();
+  }
+
+  return fabs(target_depth_m - depth) < 0.1f;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                          (5j) Holding Depth
+//                                                          (5j) PI Hold 
 
-bool hold_depth() {
+bool PI_hold() {
+
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  updating_encoder();
+
+  float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5f);
+
+  data_logging();
+
+  if(motor > 0.1f) {
+    piston_out();
+  } else if(motor < -0.1f) {
+    piston_in();
+  } else {
+    piston_stop();
+  }
+
+  if(abs(target_depth_m - depth) < 0.1f) {
+    if (hold_start_time == 0) {
+      hold_start_time = millis();
+    } else if (millis() - hold_start_time >= HOLD_TIME) {
+      hold_start_time = 0;
+      return true; 
+    }
+  } else {
+    hold_start_time = 0;
+  }
 
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                        (5k) Competition Mission 
 
-// PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
+// PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
 
-}
+  int depth = 0;
+  static bool holding = false;
 
+  float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
+
+  target_depth_m = profile_depths[depth];
+  bool at_depth = PI_depth;
+
+  if(at_depth && !holding) {
+    holding = true;
+    hold_start_time = millis();
+  }
+
+  if(holding) {
+    bool hold_success = PI_hold();
+
+    if (hold_success) {
+      holding = false;
+      depth++;
+      target_depth_m = profile_depths[depth];
+    }
+  }
+}
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                           (6a&b) Buoyancy/Ballasting Calibration: Encoder Depth
+//                                           (6a&b) Buoyancy/Ballasting Calibration: Encoder Counts
 
 void piston_move_to(long target_counts) {
   if (encoder_counts < target_counts) {
@@ -627,5 +751,45 @@ void piston_move_to(long target_counts) {
   piston_stop();
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                               Loop
+
+void loop() {
+  static bool test_started = false;
+  String cmd = radio_receive(100);
+
+  if (cmd == "extend") {
+    Serial.println("Command: extend to 200000");
+    piston_move_to(ENCODER_MAX_COUNT);
+
+    Serial.print("Reached: ");
+    Serial.println(encoder_counts);
+    update_encoder();
+  }
+
+  if (cmd == "sendlog") {
+    radio_send("Beginning log transmission...");
+    radiotransmit_data();
+  }
+
+  if (cmd == "stop") {
+    piston_stop();
+    radio_send("Emergency stop triggered.");
+    test_started = false;
+  }
+    
+  if (!test_started) {
+    if (cmd == "start") {
+      test_started = true;
+      competition_mission();
+      radio_send("Cycle complete. Log saved to LittleFS.");
+      test_started = false;
+    }
+  }
+  
+  if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+  }
+}
 
 
