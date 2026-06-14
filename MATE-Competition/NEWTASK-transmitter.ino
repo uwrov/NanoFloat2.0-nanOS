@@ -229,18 +229,7 @@ void setup() {
   delay(10000);
 
   // Ballasting test
-  Serial.println("Resetting piston position...");
-  piston_reset();
-  Serial.println("Ballasting test - extending piston halfway...");
-  piston_move_to(97500);
-  delay(1000);
-  
-  piston_stop();
-  update_encoder();
-  Serial.print("Encoder after extend: ");
-  Serial.println(encoder_counts);
-  Serial.print("Normalized: ");
-  Serial.println(normalized_position);
+  piston_homing();
 
   // Initialize MS5837 Bar-30 sensor
   Serial.println("\n Initializing MS5837 pressure sensor...");
@@ -754,6 +743,21 @@ void piston_move_to(long target_counts) {
   piston_stop();
 }
 
+void piston_homing() {
+  Serial.println("Resetting piston position...");
+  piston_reset();
+  Serial.println("Extending piston halfway...");
+  piston_move_to(97500);
+  delay(1000);
+  
+  piston_stop();
+  update_encoder();
+  Serial.print("Encoder after extend: ");
+  Serial.println(encoder_counts);
+  Serial.print("Normalized: ");
+  Serial.println(normalized_position);
+}
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                               Loop
 
@@ -761,13 +765,8 @@ void loop() {
   static bool test_started = false;
   String cmd = radio_receive(100);
 
-  if (cmd == "extend") {
-    Serial.println("Command: extend to 200000");
-    piston_move_to(ENCODER_MAX_COUNT);
-
-    Serial.print("Reached: ");
-    Serial.println(encoder_counts);
-    update_encoder();
+  if (cmd == "home") {
+    piston_homing();
   }
 
   if (cmd == "sendlog") {
