@@ -712,6 +712,8 @@ void competition_mission() {
       holding = false;
       if(depth < 3) {
         depth++;
+        target_depth_m = profile_depths[depth];
+        PI_move();
       } else {
         mission_complete = true;
         piston_stop();
