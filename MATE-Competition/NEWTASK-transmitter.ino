@@ -692,34 +692,27 @@ bool PI_hold() {
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
 
-  static int depth = 0;
-  static bool holding = false;
+    float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
 
-  float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
+    // Number of bytes / size of one element
+    int num_depths = sizeof(profile_depths) / sizeof(profile_depths[0]);
 
-  target_depth_m = profile_depths[depth];
-  bool at_depth = PI_move();
-
-  if(at_depth && !holding) {
-    holding = true;
-    return;
-  }
-
-  if(holding) {
-    bool hold_success = PI_hold();
-
-    if (hold_success) {
-      holding = false;
-      if(depth < 3) {
-        depth++;
+    // Iterate through all depths in the array
+    for (int depth = 0; depth < num_depths; depth++) {
         target_depth_m = profile_depths[depth];
-        PI_move();
-      } else {
-        mission_complete = true;
-        piston_stop();
-      }
+        
+        // Move to target depth
+        while (!PI_move()) {
+            delay(50);
+        }
+        // Hold at target depth
+        hold_start_time = 0;
+        while (!PI_hold()) {
+            delay(50);
+        }
     }
-  }
+    mission_complete = true;
+    piston_stop();
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                           (6a&b) Buoyancy/Ballasting Calibration: Encoder Counts
@@ -771,12 +764,6 @@ void loop() {
   if (cmd == "sendlog") {
     radio_send("Beginning log transmission...");
     radiotransmit_data();
-  }
-
-  if (cmd == "stop") {
-    piston_stop();
-    radio_send("Emergency stop triggered.");
-    test_started = false;
   }
     
   if (!test_started) {
