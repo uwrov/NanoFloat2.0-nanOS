@@ -228,9 +228,6 @@ void setup() {
   piston_stop();
   delay(10000);
 
-  // Ballasting test
-  piston_homing();
-
   // Initialize MS5837 Bar-30 sensor
   Serial.println("\n Initializing MS5837 pressure sensor...");
   int attempts = 0;
@@ -674,7 +671,7 @@ bool PI_hold() {
     piston_stop();
   }
 
-  if(abs(target_depth_m - depth) < 0.1f) {
+  if(abs(target_depth_m - depth) < 0.3f) {
     if (hold_start_time == 0) {
       hold_start_time = millis();
     } else if (millis() - hold_start_time >= HOLD_TIME) {
@@ -705,7 +702,7 @@ void competition_mission() {
 
   if(at_depth && !holding) {
     holding = true;
-    hold_start_time = millis();
+    return;
   }
 
   if(holding) {
@@ -793,4 +790,3 @@ void loop() {
       piston_stop();
   }
 }
-
