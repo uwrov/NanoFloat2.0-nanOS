@@ -693,7 +693,7 @@ void competition_mission() {
     // Transmit pre-descent packet:
     float depth, pressure;
     read_sensor(depth, pressure);
-    save_data(depth, pressure);
+    save_data(depth, pressure, encoder);
     radiotransmit_data();
   
     float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
