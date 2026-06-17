@@ -199,6 +199,9 @@ DepthController depthController;
 // (6) Buoyancy/ballasting:
 void piston_move_to(long target_counts);
 
+// (7) Surfacing pre-descent:
+void surface();
+
 /* Additional for future use
 void wifitransmit_data(); */
 
@@ -691,7 +694,9 @@ bool PI_hold() {
 
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
-
+    
+    surface();
+  
     float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
 
     // Number of bytes / size of one element
@@ -744,10 +749,26 @@ void piston_homing() {
   
   piston_stop();
   update_encoder();
+  // In case plugged into surface station
   Serial.print("Encoder after extend: ");
   Serial.println(encoder_counts);
   Serial.print("Normalized: ");
   Serial.println(normalized_position);
+}
+
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                     (7) Surfacing Pre-descent
+
+void surface() {
+  
+  piston_move_to(ENCODER_MAX_COUNT);
+  update_encoder();
+  
+  float depth, pressure;
+  read_sensor(depth, pressure);
+  save_data(depth, pressure);
+  radiotransmit_data();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
