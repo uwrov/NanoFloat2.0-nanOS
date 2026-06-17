@@ -9,6 +9,4 @@ const float MAX_DEPTH = 4.0;
 
 const unsigned long HOLD_TIME = 30000;
 
-const unsigned long MAX_MOTOR_TIME_MS = 240000; // In milliseconds - 4 minutes
-
 #endif
