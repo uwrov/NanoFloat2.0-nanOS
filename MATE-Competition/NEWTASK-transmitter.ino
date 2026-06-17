@@ -266,7 +266,7 @@ void setup() {
   bool fileexists = LittleFS.exists(LOG_FILE); 
   if (!fileexists) {
     Serial.println("Log file doesn't exists, creating..."); 
-    writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPA)\r\n"); 
+    writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPA), Encoder Counts\r\n"); 
   } else {
     Serial.println("Log file already exists, appending"); 
   }
@@ -510,7 +510,7 @@ void read_sensor(float &depth, float &pressure) {
   }
 }
 
-void save_data(float depth, float pressure) {
+void save_data(float depth, float pressure, long encoder) {
   struct tm timeinfo; 
   String timestamp; 
 
@@ -522,7 +522,7 @@ void save_data(float depth, float pressure) {
     timestamp = String(millis()); 
   }
 
-  String line = COMPANY_NUMBER + ", " + timestamp + ", " + String(depth, 2) + ", " + String(pressure, 2) + "\r\n"; 
+  String line = COMPANY_NUMBER + ", " + timestamp + ", " + String(depth, 2) + ", " + String(pressure, 2) + ", " + String(encoder) + "\r\n"; 
   appendFile(LittleFS, LOG_FILE, line.c_str());  
 }
 
@@ -535,14 +535,7 @@ void data_logging() {
     if (millis() - lastLog >= 5000) {
       float depth, pressure;
       read_sensor(depth, pressure);
-      save_data(depth, pressure);
-    
-      Serial.print("Logged: ");
-      Serial.print(depth);
-      Serial.print(" m, ");
-      Serial.print(pressure);
-      Serial.println(" kPa");
-      lastLog = millis();      
+      save_data(depth, pressure, encoder_counts);    
     }
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------------
