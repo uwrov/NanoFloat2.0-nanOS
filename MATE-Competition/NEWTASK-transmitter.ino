@@ -694,8 +694,14 @@ bool PI_hold() {
 
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
-    
-    surface();
+
+    // Make sure float is no longer in contact with any station personnel 
+    delay(30000);
+    // Transmit pre-descent packet:
+    float depth, pressure;
+    read_sensor(depth, pressure);
+    save_data(depth, pressure);
+    radiotransmit_data();
   
     float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
 
@@ -765,10 +771,6 @@ void surface() {
   piston_move_to(ENCODER_MAX_COUNT);
   update_encoder();
   
-  float depth, pressure;
-  read_sensor(depth, pressure);
-  save_data(depth, pressure);
-  radiotransmit_data();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -780,6 +782,10 @@ void loop() {
 
   if (cmd == "home") {
     piston_homing();
+  }
+
+  if (cmd == "surface") {
+    surface();
   }
 
   if (cmd == "sendlog") {
