@@ -593,7 +593,7 @@ void piston_reset() {
 
   encoder_counts = 0;
   encoder_delta = 0;
-  normalized_position = 0.0f;
+  normalized_position = 0.0;
 
   piston_move_to(10);
 }
@@ -606,11 +606,11 @@ double encoder_normalization(long counts) {
   double position = (double) (counts) / (ENCODER_MAX_COUNT);
 
   if(position < 0.0) { 
-    position = 0.0f; 
+    position = 0.0; 
   }
     
-  if(position > 1.0f) {
-    position = 1.0f;
+  if(position > 1.0) {
+    position = 1.0;
   } 
 
   return position;
