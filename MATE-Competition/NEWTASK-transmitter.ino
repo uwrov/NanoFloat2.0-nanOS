@@ -66,26 +66,28 @@ class DepthController {
   private:
       bool initialized = false;
 
-      double previous_time = 0.0;
-      double previous_depth = 0.0;
-      double velocity = 0.0;
-      double velocity_integral = 0.0;
-      double previous_cmd = 0.0;
+      double state_time = 0.0;
+      double state_depth = 0.0;
+      double state_velocity = 0.0;
+      double state_vi = 0.0;
+      double cmd = 0.0;
 
   public:
 
     float update(double target_z, double current_z, double piston, double neutral) {
           
-      float t = millis() / 1000.0;
+      double t = millis() / 1000.0;
 
       if (!initialized) {
-          initialized = true;
+        initialized = true;
 
-          previous_time = t;
-          previous_depth = current_z;
-          velocity = 0.0;
-          velocity_integral = 0.0;
-          previous_cmd = piston;
+        state_time = t;
+        state_depth = current_z;
+        state_velocity = 0.0;
+        state_vi = 0.0;
+        cmd = piston;
+
+        return 0.0f;
       }
 
       const double approach_distance = 1.0;
@@ -97,13 +99,13 @@ class DepthController {
       const double ki_v = 0.1;
       const double kp_piston = 10.0;
 
-      double dt = t - previous_time;
+      double dt = t - state_time;
 
       // v = (current_z - state["z"]) / dt
-      double v = (current_z - previous_depth) / dt;
+      double v = (current_z - state_depth) / dt;
 
       // v = 0.8*state["v"] + 0.2*v
-      v = 0.8 * velocity + 0.2 * v;
+      v = 0.8 * state_velocity + 0.2 * v;
 
       // braking_distance = max(v^2/(2*decel), min_brake)
       double braking_distance = max((v * v) / (2.0 * decel), min_brake);
@@ -111,36 +113,34 @@ class DepthController {
       // error = target_z - current_z
       double error = target_z - current_z;
 
-      double dist = abs(error);
+      double dist = fabs(error);
 
       // moving_towards_target = error * v > 0
       bool moving_towards_target = (error * v > 0.0);
 
-      double cmd;
       // if dist < depth_deadband
       if (dist < depth_deadband) {
-          cmd = neutral;
-          velocity_integral = 0.0;
+        cmd = neutral;
       } else if (moving_towards_target && dist < braking_distance) { // elif moving_towards_target and dist < braking_distance
-          if (v > 0) {
-            cmd = 1.0;
-          } else {            
-            cmd = 0.0;
-          }
+        if (v > 0) {
+          cmd = 1.0;
+        } else {            
+          cmd = 0.0;
+        }
       } else if (dist > approach_distance) {  // elif dist > approach_distance
-          if (error > 0) {
-            cmd = 0.0;
-          } else {
-            cmd = 1.0;
-          }
+        if (error > 0) {
+          cmd = 0.0;
+        } else {
+          cmd = 1.0;
+        }
       } else {  // Velocity PI loop
         double v_desired = 0.25 * error;
 
         double ev = v_desired - v;
 
-        velocity_integral += ev * dt;
+        state_vi = state_vi + (ev * dt);
 
-        cmd = neutral - (kp_v * ev + ki_v * velocity_integral);
+        cmd = neutral - ((kp_v * ev) + (ki_v * state_vi));
       }
 
       // motor = kp_piston*(cmd-piston)
@@ -149,10 +149,10 @@ class DepthController {
       motor = constrain(motor, -1.0, 1.0);
 
       // state.update(...)
-      previous_time = t;
-      previous_depth = current_z;
-      velocity = v;
-      previous_cmd = cmd;
+      state_time = t;
+      state_depth = current_z;
+      state_velocity = v;
+      cmd = cmd;
 
       return motor;
     }
