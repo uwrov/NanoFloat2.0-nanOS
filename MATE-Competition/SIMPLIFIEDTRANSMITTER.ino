@@ -38,7 +38,6 @@ const int PIN_MOTOR_2 = 12; // GPB5
 const String COMPANY_NUMBER = "0416A"; 
 
 // Depth control parameters
-//TODO save encoder counts during power off? some other way of not assuming it is zero on reboot
 volatile long encoder_delta = 0; 
 int encoder_counts = 0;
 double normalized_position = 0.0;
@@ -65,7 +64,7 @@ bool radio_available = false;
 class DepthController {
   private:
       bool initialized = false;
-      //TODO some way to reset state when changing targets
+
       double state_time = 0.0;
       double state_depth = 0.0;
       double state_velocity = 0.0;
@@ -102,7 +101,7 @@ class DepthController {
       double dt = t - state_time;
 
       // v = (current_z - state["z"]) / dt
-      double v = (current_z - state_depth) / dt; //TODO? make sure we never accidentally divide by zero
+      double v = (current_z - state_depth) / dt;
 
       // v = 0.8*state["v"] + 0.2*v
       v = 0.8 * state_velocity + 0.2 * v;
@@ -118,9 +117,11 @@ class DepthController {
       // moving_towards_target = error * v > 0
       bool moving_towards_target = (error * v > 0.0);
 
+      cmd = constrain(cmd, 0.0, 1.0);
+
       // if dist < depth_deadband
       if (dist < depth_deadband) {
-        cmd = neutral; //TODO this might only work when submeerged; at surface you don't want to be neutral, you want to be positive. Perhaps in this case just maintain cmd position?
+        cmd = cmd;
       } else if (moving_towards_target && dist < braking_distance) { // elif moving_towards_target and dist < braking_distance
         if (v > 0) {
           cmd = 1.0;
@@ -140,7 +141,7 @@ class DepthController {
 
         state_vi = state_vi + (ev * dt);
 
-        cmd = neutral - ((kp_v * ev) + (ki_v * state_vi)); //TODO cmd should be in range 0-1 right?
+        cmd = neutral - ((kp_v * ev) + (ki_v * state_vi));
       }
 
       // motor = kp_piston*(cmd-piston)
@@ -155,6 +156,16 @@ class DepthController {
       cmd = cmd;
 
       return motor;
+    }
+
+    void reset() {
+      bool initialized = false;
+
+      state_time = 0.0;
+      state_depth = 0.0;
+      state_velocity = 0.0;
+      state_vi = 0.0;
+      cmd = 0.0;
     }
 };
 
@@ -189,7 +200,7 @@ void piston_in();
 void piston_stop();
 void IRAM_ATTR encoder_isr(); 
 void piston_reset(); 
-double encoder_normalization(long counts); // Implementation needed 
+double encoder_normalization(long counts); 
 void update_encoder();
 bool PI_move(); // Parameters and implementation needed
 bool PI_hold(); // Parameters and implementation needed
@@ -217,6 +228,7 @@ void setup() {
   // Configure direct GPIO pins
   pinMode(PIN_ENCODER_A, INPUT_PULLUP);
   pinMode(PIN_ENCODER_B, INPUT_PULLUP);
+  // Everytime encoder A transitions from low to high, call isr 
   attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_A), encoder_isr, RISING); 
   pinMode(PIN_LIMIT_SW, INPUT_PULLUP);
   pinMode(PIN_RF95_RST, OUTPUT);
@@ -245,7 +257,7 @@ void setup() {
 
 
   pressureSensor.setModel(MS5837::MS5837_30BA);   // -> Bar30 model set
-  pressureSensor.setFluidDensity(1025);           // -> 997 for freshwater, 1025 for seawater
+  pressureSensor.setFluidDensity(997);           // -> 997 for freshwater, 1025 for seawater
   Serial.println("Pressure sensor initialized!");
 
   // Initialize radio transmitter
@@ -546,6 +558,11 @@ void data_logging() {
 //                                                      (5a&b&c) Piston out, Piston In, Piston Stop
 
 void piston_out() {
+   if (encoder_counts >= ENCODER_MAX_COUNT) {
+    piston_move_to(encoder_counts - 10);
+    return;
+  }
+
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
 
@@ -554,6 +571,11 @@ void piston_out() {
 }
 
 void piston_in() {
+  if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+    piston_move_to(encoder_counts + 10);
+    return;
+  }
+
   mcp.digitalWrite(PIN_MOTOR_1, LOW);
   mcp.digitalWrite(PIN_MOTOR_2, LOW);
   
@@ -594,7 +616,7 @@ void piston_reset() {
 
   encoder_counts = 0;
   encoder_delta = 0;
-  normalized_position = 0.0;
+  normalized_position = 0.0f;
 
   piston_move_to(10);
 }
@@ -606,13 +628,12 @@ double encoder_normalization(long counts) {
     
   double position = (double) (counts) / (ENCODER_MAX_COUNT);
 
-  //TODO? clamping like this may end up obfuscating/concealing overtravel, but not sure.
   if(position < 0.0) { 
-    position = 0.0; 
+    position = 0.0f; 
   }
     
-  if(position > 1.0) {
-    position = 1.0;
+  if(position > 1.0f) {
+    position = 1.0f;
   } 
 
   return position;
@@ -638,9 +659,8 @@ bool PI_move() {
   read_sensor(depth, pressure);
   update_encoder();
 
-  float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5); //TODO make sure 0.5 is actually neutral
+  float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5);
 
-  //TODO may want to check this against limit switch  or encoder limits
   if(motor > 0.1f) {
     piston_out();
   } else if(motor < -0.1f) {
@@ -666,6 +686,8 @@ bool PI_hold() {
 
   float motor = depthController.update(target_depth_m, depth, normalized_position, 0.5);
 
+  data_logging();
+
   if(motor > 0.1f) {
     piston_out();
   } else if(motor < -0.1f) {
@@ -674,9 +696,7 @@ bool PI_hold() {
     piston_stop();
   }
 
-  //TODO reset timer when leaving range
   if(fabs(target_depth_m - depth) < 0.3f) {
-    data_logging();
     if (hold_start_time == 0) {
       hold_start_time = millis();
     } else if (millis() - hold_start_time >= HOLD_TIME) {
@@ -697,8 +717,9 @@ void competition_mission() {
   double profile_depths[4] = {2.5, 0.4, 2.5, 0.4};
 
     // Iterate through all depths in the array
-    for (int i = 0; i < 4; i++) { 
+    for (int i = 0; i < 4; i++) {
       target_depth_m = profile_depths[i];
+      depthController.reset();
         
       // Move to target depth
       while (!PI_move()) {
@@ -710,7 +731,6 @@ void competition_mission() {
       while (!PI_hold()) {
         delay(50);
       }
-      //TODO reset state (velocity and integral error) for next profile?
     }
     mission_complete = true;
     piston_stop();
@@ -725,7 +745,7 @@ void piston_move_to(long target_counts) {
     piston_in();
   }
 
-  while (abs(encoder_counts - target_counts) > 100) {
+  while (abs(encoder_counts - target_counts) > 100) { 
     update_encoder();
   }
 
@@ -736,7 +756,7 @@ void piston_move_to(long target_counts) {
   piston_stop();
 }
 
-void piston_homing() { //doesn't check against limit switch
+void piston_homing() {
   Serial.println("Resetting piston position...");
   piston_reset();
   Serial.println("Extending piston halfway...");
@@ -756,7 +776,7 @@ void piston_homing() { //doesn't check against limit switch
 
 void loop() {
   static bool test_started = false;
-  String cmd = radio_receive(100);
+  String cmd = radio_receive(200);
 
   if (cmd == "home") {
     piston_homing();
@@ -773,10 +793,6 @@ void loop() {
       competition_mission();
       radio_send("Cycle complete. Log saved to LittleFS.");
       test_started = false;
-    }
-  }
-  
-  if (digitalRead(PIN_LIMIT_SW) == HIGH) { //correct me if im wrong but i think this wouldn't trigger during competition_mission() or piston_homing()
-    piston_stop();
+    } 
   }
 }
