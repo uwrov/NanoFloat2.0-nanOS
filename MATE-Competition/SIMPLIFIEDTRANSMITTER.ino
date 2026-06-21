@@ -199,6 +199,7 @@ void IRAM_ATTR encoder_isr();
 void piston_reset(); 
 double encoder_normalization(long counts); 
 void update_encoder();
+void reset_mission_state();
 bool PI_move(); // Parameters and implementation needed
 bool PI_hold(); // Parameters and implementation needed
 void competition_mission(); // PID_depth 2.5, hold, PID_depth 0.4, hold, repeat
@@ -637,7 +638,7 @@ double encoder_normalization(long counts) {
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-//                                                      (5g) Update Encoder Count
+//                                                      (5g) Update/Reset Mission Variables
 
 void update_encoder() {
   noInterrupts();
@@ -646,6 +647,14 @@ void update_encoder() {
   interrupts();
 
   normalized_position = encoder_normalization(encoder_counts);
+}
+
+void reset_mission_state() {
+  depthController.reset();
+
+  target_depth_m = 0.0;
+  hold_start_time = 0;
+  mission_complete = false;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -714,6 +723,7 @@ bool PI_hold() {
 
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
+  reset_mission_state();
 
   double profile_depths[4] = {2.5, 0.4, 2.5, 0.4};
 
