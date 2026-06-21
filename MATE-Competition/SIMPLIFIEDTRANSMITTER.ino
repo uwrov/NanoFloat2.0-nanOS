@@ -701,6 +701,8 @@ bool PI_hold() {
       hold_start_time = 0;
       return true; 
     }
+    return false; 
+
   } else {
     hold_start_time = 0;
     return false;
