@@ -117,8 +117,6 @@ class DepthController {
       // moving_towards_target = error * v > 0
       bool moving_towards_target = (error * v > 0.0);
 
-      cmd = constrain(cmd, 0.0, 1.0);
-
       // if dist < depth_deadband
       if (dist < depth_deadband) {
         cmd = cmd;
@@ -136,13 +134,12 @@ class DepthController {
         }
       } else {  // Velocity PI loop
         double v_desired = 0.25 * error;
-
         double ev = v_desired - v;
-
         state_vi = state_vi + (ev * dt);
-
         cmd = neutral - ((kp_v * ev) + (ki_v * state_vi));
       }
+
+      cmd = constrain(cmd, 0.0, 1.0);
 
       // motor = kp_piston*(cmd-piston)
       double motor = kp_piston * (cmd - piston);
@@ -159,7 +156,7 @@ class DepthController {
     }
 
     void reset() {
-      bool initialized = false;
+      initialized = false;
 
       state_time = 0.0;
       state_depth = 0.0;
@@ -558,7 +555,7 @@ void data_logging() {
 //                                                      (5a&b&c) Piston out, Piston In, Piston Stop
 
 void piston_out() {
-   if (encoder_counts >= ENCODER_MAX_COUNT) {
+  if (encoder_counts >= ENCODER_MAX_COUNT) {
     piston_move_to(encoder_counts - 10);
     return;
   }
@@ -699,13 +696,15 @@ bool PI_hold() {
   if(fabs(target_depth_m - depth) < 0.3f) {
     if (hold_start_time == 0) {
       hold_start_time = millis();
+      return false;
     } else if (millis() - hold_start_time >= HOLD_TIME) {
       hold_start_time = 0;
       return true; 
     }
+  } else {
+    hold_start_time = 0;
+    return false;
   }
-
-  return false;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -780,6 +779,7 @@ void loop() {
 
   if (cmd == "home") {
     piston_homing();
+    radio_send("Piston homing finished...");
   }
 
   if (cmd == "sendlog") {
