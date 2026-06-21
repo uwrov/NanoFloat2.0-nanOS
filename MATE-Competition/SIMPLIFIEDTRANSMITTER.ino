@@ -95,7 +95,7 @@ class DepthController {
 
       const double depth_deadband = 0.1;
       const double kp_v = 1.0;
-      const double ki_v = 0.1;
+      const double ki_v = 0.2;
       const double kp_piston = 10.0;
 
       double dt = t - state_time;
