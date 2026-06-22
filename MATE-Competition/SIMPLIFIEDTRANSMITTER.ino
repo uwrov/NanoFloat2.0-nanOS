@@ -72,6 +72,15 @@ class DepthController {
       double cmd = 0.0;
 
   public:
+    struct State {
+      double error = 0.0;
+      double v = 0.0;
+      double v_desired = 0.0;
+      double ev = 0.0;
+      double vi = 0.0;
+      double cmd = 0.0;
+      double motor = 0.0;
+    } last_state;
 
     float update(double target_z, double current_z, double piston, double neutral) {
           
@@ -117,6 +126,9 @@ class DepthController {
       // moving_towards_target = error * v > 0
       bool moving_towards_target = (error * v > 0.0);
 
+      double v_desired = 0.0; 
+      double ev = 0.0; 
+
       // if dist < depth_deadband
       if (dist < depth_deadband) {
         cmd = cmd;
@@ -133,8 +145,8 @@ class DepthController {
           cmd = 1.0;
         }
       } else {  // Velocity PI loop
-        double v_desired = 0.25 * error;
-        double ev = v_desired - v;
+        v_desired = 0.25 * error;
+        ev = v_desired - v;
         state_vi = state_vi + (ev * dt);
         cmd = neutral - ((kp_v * ev) + (ki_v * state_vi));
       }
@@ -150,9 +162,18 @@ class DepthController {
       state_time = t;
       state_depth = current_z;
       state_velocity = v;
-      cmd = cmd;
-
-      return motor;
+      state_vi = state_vi;
+      cmd = cmd; 
+      
+      last_state.error = error;
+      last_state.v = v;
+      last_state.v_desired = v_desired;
+      last_state.ev = ev;
+      last_state.vi = state_vi;
+      last_state.cmd = cmd;
+      last_state.motor = motor;
+      
+      return (float)motor;
     }
 
     void reset() {
@@ -163,6 +184,8 @@ class DepthController {
       state_velocity = 0.0;
       state_vi = 0.0;
       cmd = 0.0;
+
+      last_state = State(); 
     }
 };
 
