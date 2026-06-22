@@ -538,8 +538,10 @@ void save_data(float depth, float pressure) {
 
 void data_logging() { 
   static unsigned long lastLog = 0;
-  // Save depth/pressure every 5 seconds
-    if (millis() - lastLog >= 5000) {
+  static bool firstLog = true;
+
+  // Always log immediately on the first call, then every 5 seconds after
+  if (firstLog || millis() - lastLog >= 5000) {
       float depth, pressure;
       read_sensor(depth, pressure);
       save_data(depth, pressure);
@@ -550,7 +552,8 @@ void data_logging() {
       Serial.print(pressure);
       Serial.println(" kPa");
       lastLog = millis();      
-    }
+      firstLog = false;
+  }
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                      (5a&b&c) Piston out, Piston In, Piston Stop
