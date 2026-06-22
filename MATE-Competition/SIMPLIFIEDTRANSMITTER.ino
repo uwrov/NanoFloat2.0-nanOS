@@ -296,7 +296,7 @@ void setup() {
   bool fileexists = LittleFS.exists(LOG_FILE); 
   if (!fileexists) {
     Serial.println("Log file doesn't exists, creating..."); 
-    writeFile("Company #, Timestamp, Depth (m), Pressure (kPa), Target Depth (m), "
+    writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPa), Target Depth (m), "
       "Error (m), Velocity (m/s), Integral (vi), Cmd (0-1), Motor (-1 to 1)\r\n"); 
   } else {
     Serial.println("Log file already exists, appending"); 
