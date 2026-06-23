@@ -35,7 +35,7 @@ const int PIN_MOTOR_2 = 12; // GPB5
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                                 Global Variables
 
-const String COMPANY_NUMBER = "0416A"; 
+const String COMPANY_NUMBER = "EX-03"; 
 
 // Depth control parameters
 volatile long encoder_delta = 0; 
