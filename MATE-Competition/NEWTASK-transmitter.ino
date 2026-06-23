@@ -280,7 +280,7 @@ void setup() {
 
 
   pressureSensor.setModel(MS5837::MS5837_30BA);   // -> Bar30 model set
-  pressureSensor.setFluidDensity(1025);           // -> 997 for freshwater, 1025 for seawater
+  pressureSensor.setFluidDensity(997);           // -> 997 for freshwater, 1025 for seawater
   Serial.println("Pressure sensor initialized!");
 
   // Initialize radio transmitter
