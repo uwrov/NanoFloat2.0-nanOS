@@ -73,6 +73,15 @@ class DepthController {
       double cmd = 0.0;
 
   public:
+    struct State {
+      double error = 0.0;
+      double v = 0.0;
+      double v_desired = 0.0;
+      double ev = 0.0;
+      double vi = 0.0;
+      double cmd = 0.0;
+      double motor = 0.0;
+    } last_state;
 
     float update(double target_z, double current_z, double piston, double neutral) {
           
@@ -96,7 +105,7 @@ class DepthController {
 
       const double depth_deadband = 0.1;
       const double kp_v = 1.0;
-      const double ki_v = 0.1;
+      const double ki_v = 0.2;
       const double kp_piston = 10.0;
 
       double dt = t - state_time;
@@ -118,9 +127,12 @@ class DepthController {
       // moving_towards_target = error * v > 0
       bool moving_towards_target = (error * v > 0.0);
 
+      double v_desired = 0.0; 
+      double ev = 0.0; 
+
       // if dist < depth_deadband
       if (dist < depth_deadband) {
-        cmd = neutral;
+        cmd = cmd;
       } else if (moving_towards_target && dist < braking_distance) { // elif moving_towards_target and dist < braking_distance
         if (v > 0) {
           cmd = 1.0;
@@ -134,14 +146,13 @@ class DepthController {
           cmd = 1.0;
         }
       } else {  // Velocity PI loop
-        double v_desired = 0.25 * error;
-
-        double ev = v_desired - v;
-
+        v_desired = 0.25 * error;
+        ev = v_desired - v;
         state_vi = state_vi + (ev * dt);
-
         cmd = neutral - ((kp_v * ev) + (ki_v * state_vi));
       }
+
+      cmd = constrain(cmd, 0.0, 1.0);
 
       // motor = kp_piston*(cmd-piston)
       double motor = kp_piston * (cmd - piston);
@@ -152,9 +163,30 @@ class DepthController {
       state_time = t;
       state_depth = current_z;
       state_velocity = v;
-      cmd = cmd;
+      state_vi = state_vi;
+      cmd = cmd; 
+      
+      last_state.error = error;
+      last_state.v = v;
+      last_state.v_desired = v_desired;
+      last_state.ev = ev;
+      last_state.vi = state_vi;
+      last_state.cmd = cmd;
+      last_state.motor = motor;
+      
+      return (float)motor;
+    }
 
-      return motor;
+    void reset() {
+      initialized = false;
+
+      state_time = 0.0;
+      state_depth = 0.0;
+      state_velocity = 0.0;
+      state_vi = 0.0;
+      cmd = 0.0;
+
+      last_state = State(); 
     }
 };
 
@@ -266,7 +298,8 @@ void setup() {
   bool fileexists = LittleFS.exists(LOG_FILE); 
   if (!fileexists) {
     Serial.println("Log file doesn't exists, creating..."); 
-    writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPA), Encoder Counts\r\n"); 
+    writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPa), Target Depth (m), "
+      "Error (m), Velocity (m/s), Integral (vi), Cmd (0-1), Motor (-1 to 1)\r\n"); 
   } else {
     Serial.println("Log file already exists, appending"); 
   }
@@ -510,7 +543,7 @@ void read_sensor(float &depth, float &pressure) {
   }
 }
 
-void save_data(float depth, float pressure, long encoder) {
+void save_data(float depth, float pressure) {
   struct tm timeinfo; 
   String timestamp; 
 
@@ -522,7 +555,18 @@ void save_data(float depth, float pressure, long encoder) {
     timestamp = String(millis()); 
   }
 
-  String line = COMPANY_NUMBER + ", " + timestamp + ", " + String(depth, 2) + ", " + String(pressure, 2) + ", " + String(encoder) + "\r\n"; 
+  DepthController::State& s = depthController.last_state;
+
+  String line = COMPANY_NUMBER + ", " + timestamp
+              + ", " + String(depth, 2)
+              + ", " + String(pressure, 2)
+              + ", " + String(target_depth_m, 2)
+              + ", " + String(s.error, 3)
+              + ", " + String(s.v, 4)
+              + ", " + String(s.vi, 4)
+              + ", " + String(s.cmd, 4)
+              + ", " + String(s.motor, 3)
+              + "\r\n"; 
   appendFile(LittleFS, LOG_FILE, line.c_str());  
 }
 
@@ -531,12 +575,15 @@ void save_data(float depth, float pressure, long encoder) {
 
 void data_logging() { 
   static unsigned long lastLog = 0;
-  // Save depth/pressure every 5 seconds
-    if (millis() - lastLog >= 5000) {
+  static bool firstLog = true;
+
+  if (firstLog || millis() - lastLog >= 5000) {
       float depth, pressure;
       read_sensor(depth, pressure);
-      save_data(depth, pressure, encoder_counts);    
-    }
+      save_data(depth, pressure);
+      lastLog = millis();
+      firstLog = false;
+  }
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                      (5a&b&c) Piston out, Piston In, Piston Stop
@@ -625,6 +672,15 @@ void update_encoder() {
   normalized_position = encoder_normalization(encoder_counts);
 }
 
+void reset_mission_state() {
+  depthController.reset();
+
+  target_depth_m = 0.0;
+  hold_start_time = 0;
+  mission_complete = false;
+}
+
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                           (5h) PI Move
 bool PI_move() {
@@ -687,13 +743,14 @@ bool PI_hold() {
 
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
+    reset_mission_state();
 
     // Make sure float is no longer in contact with any station personnel 
     delay(30000);
     // Transmit pre-descent packet:
     float depth, pressure;
     read_sensor(depth, pressure);
-    save_data(depth, pressure, encoder);
+    save_data(depth, pressure);
     radiotransmit_data();
   
     float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
@@ -702,8 +759,8 @@ void competition_mission() {
     int num_depths = sizeof(profile_depths) / sizeof(profile_depths[0]);
 
     // Iterate through all depths in the array
-    for (int depth = 0; depth < num_depths; depth++) {
-        target_depth_m = profile_depths[depth];
+    for (int i = 0; i < num_depths; i++) {
+        target_depth_m = profile_depths[i];
         
         // Move to target depth
         while (!PI_move()) {
