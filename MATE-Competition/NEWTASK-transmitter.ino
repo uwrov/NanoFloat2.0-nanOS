@@ -761,7 +761,7 @@ void competition_mission() {
     // Iterate through all depths in the array
     for (int i = 0; i < num_depths; i++) {
         target_depth_m = profile_depths[i];
-        reset_mission_state();
+        depthController.reset();
         
         // Move to target depth
         while (!PI_move()) {
