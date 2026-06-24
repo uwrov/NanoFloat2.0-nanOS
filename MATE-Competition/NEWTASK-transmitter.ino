@@ -561,11 +561,6 @@ void save_data(float depth, float pressure) {
               + ", " + String(depth, 2)
               + ", " + String(pressure, 2)
               + ", " + String(target_depth_m, 2)
-              + ", " + String(s.error, 3)
-              + ", " + String(s.v, 4)
-              + ", " + String(s.vi, 4)
-              + ", " + String(s.cmd, 4)
-              + ", " + String(s.motor, 3)
               + "\r\n"; 
   appendFile(LittleFS, LOG_FILE, line.c_str());  
 }
