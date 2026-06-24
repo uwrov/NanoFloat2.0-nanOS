@@ -299,7 +299,7 @@ void setup() {
   if (!fileexists) {
     Serial.println("Log file doesn't exists, creating..."); 
     writeFile(LittleFS, LOG_FILE, "Company #, Timestamp, Depth (m), Pressure (kPa), Target Depth (m), "
-      "Error (m), Velocity (m/s), Integral (vi), Cmd (0-1), Motor (-1 to 1)\r\n"); 
+      "\r\n"); 
   } else {
     Serial.println("Log file already exists, appending"); 
   }
@@ -554,8 +554,6 @@ void save_data(float depth, float pressure) {
   } else {
     timestamp = String(millis()); 
   }
-
-  DepthController::State& s = depthController.last_state;
 
   String line = COMPANY_NUMBER + ", " + timestamp
               + ", " + String(depth, 2)
