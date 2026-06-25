@@ -836,6 +836,10 @@ void loop() {
     radio_send("Beginning log transmission...");
     radiotransmit_data();
   }
+
+  if (cmd == "stopuwrov ") {
+    piston_stop(); 
+  }
     
   if (!test_started) {
     if (cmd == "startuwrov") {
