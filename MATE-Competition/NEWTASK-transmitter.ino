@@ -824,21 +824,21 @@ void loop() {
   static bool test_started = false;
   String cmd = radio_receive(100);
 
-  if (cmd == "home") {
+  if (cmd == "homeuwrov") {
     piston_homing();
   }
 
-  if (cmd == "surface") {
+  if (cmd == "surfaceuwrov") {
     surface();
   }
 
-  if (cmd == "sendlog") {
+  if (cmd == "sendloguwrov") {
     radio_send("Beginning log transmission...");
     radiotransmit_data();
   }
     
   if (!test_started) {
-    if (cmd == "start") {
+    if (cmd == "startuwrov") {
       test_started = true;
       competition_mission();
       radio_send("Cycle complete. Log saved to LittleFS.");
