@@ -769,7 +769,7 @@ void competition_mission() {
     save_data(depth, pressure);
     radiotransmit_data();
   
-    float profile_depths[] = {2.5f, 0.4f, 2.5f, 0.4f};
+    float profile_depths[] = {2.35f, 0.4f, 2.35f, 0.4f};
 
     // Number of bytes / size of one element
     int num_depths = sizeof(profile_depths) / sizeof(profile_depths[0]);
@@ -871,6 +871,7 @@ void loop() {
 
   if (cmd == "homeuwrov") {
     piston_homing();
+    radio_send("Homing completed.");
   }
 
   if (cmd == "surfaceuwrov") {
