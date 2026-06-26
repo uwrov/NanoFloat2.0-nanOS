@@ -44,6 +44,7 @@ float normalized_position = 0.0;
 float current_depth_m = 0.0;
 float target_depth_m = 0.0;
 unsigned long hold_start_time = 0;
+bool if_stopped = false;
 
 // Hardware/Communication Objects
 MS5837 pressureSensor;
@@ -677,6 +678,13 @@ void reset_mission_state() {
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //                                                           (5h) PI Move
 bool PI_move() {
+
+  String cmd = radio_receive(0);
+  if (cmd == "stopuwrov") {
+    piston_stop();
+    if_stopped = true;
+    return true; 
+  }
   
   float depth, pressure;
   read_sensor(depth, pressure);
@@ -699,6 +707,13 @@ bool PI_move() {
 //                                                          (5i) PI Hold 
 
 bool PI_hold() {
+
+  String cmd = radio_receive(0);
+  if (cmd == "stopuwrov") {
+    piston_stop();
+    if_stopped = true;
+    return true; 
+  }
 
   float depth, pressure;
   read_sensor(depth, pressure);
@@ -728,7 +743,6 @@ bool PI_hold() {
   }
 
   return false;
-
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -737,6 +751,7 @@ bool PI_hold() {
 // PI_move.5, PI_hold, PI_move 0.4, PID_hold, repeat
 void competition_mission() {
     reset_mission_state();
+    if_stopped = false;
 
     // Make sure float is no longer in contact with any station personnel 
     delay(30000);
@@ -753,6 +768,10 @@ void competition_mission() {
 
     // Iterate through all depths in the array
     for (int i = 0; i < num_depths; i++) {
+        if (if_stopped) {
+          break; 
+        }
+
         target_depth_m = profile_depths[i];
         depthController.reset();
         
@@ -760,10 +779,17 @@ void competition_mission() {
         while (!PI_move()) {
             delay(50);
         }
+        if (if_stopped) {
+          break; 
+        }
+
         // Hold at target depth
         hold_start_time = 0;
         while (!PI_hold()) {
             delay(50);
+        }
+        if (if_stopped) {
+          break; 
         }
     }
     mission_complete = true;
@@ -837,7 +863,7 @@ void loop() {
     radiotransmit_data();
   }
 
-  if (cmd == "stopuwrov ") {
+  if (cmd == "stopuwrov") {
     piston_stop(); 
   }
     
@@ -845,8 +871,15 @@ void loop() {
     if (cmd == "startuwrov") {
       test_started = true;
       competition_mission();
-      radio_send("Cycle complete. Log saved to LittleFS.");
+
+      if (if_stopped) {
+        radio_send("Mission stopped by user command.");
+      } else {
+        radio_send("Cycle complete. Log saved to LittleFS.");
+      }
+      radiotransmit_data(); 
       test_started = false;
+      if_stopped = false;
     }
   }
   
