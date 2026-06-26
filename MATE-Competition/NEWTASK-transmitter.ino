@@ -432,15 +432,15 @@ void radio_send(const String &message) {
 
 String radio_receive(unsigned long timeout_ms) {
   unsigned long start = millis();
-  while(millis() - start < timeout_ms) {
+  do {
     if (rf95.available()) {
       uint8_t buf[120];
       uint8_t len = sizeof(buf);
-      if(rf95.recv(buf, &len)) {
+      if (rf95.recv(buf, &len)) {
         return String((char *)buf);
       }
     }
-  }
+  } while (millis() - start < timeout_ms);
   return "";
 }
 
