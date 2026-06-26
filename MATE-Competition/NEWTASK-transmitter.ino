@@ -807,6 +807,17 @@ void piston_move_to(long target_counts) {
 
   while (encoder_counts != target_counts) {
     update_encoder();
+    String cmd = radio_receive(0);
+    if (cmd == "stopuwrov") {
+      piston_stop();
+      if_stopped = true;
+      return;
+    }
+
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      return;
+    }
   }
 
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
@@ -880,6 +891,10 @@ void loop() {
       radiotransmit_data(); 
       test_started = false;
       if_stopped = false;
+    }
+  } else {
+    if (cmd == "stopuwrov") {
+      if_stopped = true;
     }
   }
   
