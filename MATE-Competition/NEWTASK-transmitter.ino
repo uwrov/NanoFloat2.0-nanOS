@@ -623,7 +623,15 @@ void piston_reset() {
 
   while (digitalRead(PIN_LIMIT_SW) == LOW) {  // Not pressed
     update_encoder();
-    delay(1);
+
+    String cmd = radio_receive(0);
+    if (cmd == "stopuwrov") {
+      piston_stop();
+      if_stopped = true;
+      return;
+    }
+
+    delay(1); 
   }
 
   // If pressed:
