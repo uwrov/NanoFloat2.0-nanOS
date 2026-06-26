@@ -762,7 +762,7 @@ void competition_mission() {
     if_stopped = false;
 
     // Make sure float is no longer in contact with any station personnel 
-    delay(30000);
+    delay(300);
     // Transmit pre-descent packet:
     float depth, pressure;
     read_sensor(depth, pressure);
@@ -821,11 +821,6 @@ void piston_move_to(long target_counts) {
       if_stopped = true;
       return;
     }
-
-    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
-      piston_stop();
-      return;
-    }
   }
 
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
@@ -871,7 +866,6 @@ void loop() {
 
   if (cmd == "homeuwrov") {
     piston_homing();
-    radio_send("Homing completed.");
   }
 
   if (cmd == "surfaceuwrov") {
@@ -897,7 +891,6 @@ void loop() {
       } else {
         radio_send("Cycle complete. Log saved to LittleFS.");
       }
-      radiotransmit_data(); 
       test_started = false;
       if_stopped = false;
     }
